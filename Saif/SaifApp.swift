@@ -11,7 +11,10 @@ import SwiftUI
 struct SaifApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            NavigationStack {
+                WelcomeView()
+            }
+            .tint(SAIFColors.primary)
         }
     }
 }

@@ -7,15 +7,10 @@
 
 import SwiftUI
 
+// Keep ContentView as a simple entry that forwards to WelcomeView
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        NavigationStack { WelcomeView() }
     }
 }
 
