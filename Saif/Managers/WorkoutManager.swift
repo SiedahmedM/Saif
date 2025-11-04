@@ -8,6 +8,8 @@ class WorkoutManager: ObservableObject {
     @Published var completedSets: [ExerciseSet] = []
     @Published var workoutRecommendation: WorkoutRecommendation?
     @Published var exerciseRecommendations: [ExerciseRecommendation] = []
+    @Published var targetSetsRange: String? = nil
+    @Published var totalSetsRecommended: Int? = nil
     @Published var availableExercises: [Exercise] = []
     @Published var exerciseDebug: ExerciseDebug? = nil
     @Published var setRepRecommendation: SetRepRecommendation?
@@ -88,7 +90,16 @@ class WorkoutManager: ObservableObject {
             let exercises = try await supabaseService.getExercisesByMuscleGroup(workoutType: session.workoutType, muscleGroup: muscleGroup)
             availableExercises = exercises
             // Build AI ordering
-            exerciseRecommendations = try await openAIService.getExerciseRecommendations(profile: profile, workoutType: session.workoutType, muscleGroup: muscleGroup, availableExercises: exercises, recentSets: [])
+            let aiResponse = try await openAIService.getExerciseRecommendations(
+                profile: profile,
+                workoutType: session.workoutType,
+                muscleGroup: muscleGroup,
+                availableExercises: exercises,
+                recentSets: []
+            )
+            exerciseRecommendations = aiResponse.recommendations
+            totalSetsRecommended = aiResponse.totalSets
+            targetSetsRange = aiResponse.targetSetsRange
             // De-duplicate by exercise name to avoid SwiftUI ForEach ID collisions
             var seen = Set<String>()
             exerciseRecommendations = exerciseRecommendations.filter { rec in
@@ -200,6 +211,9 @@ class WorkoutManager: ObservableObject {
                     ExerciseRecommendation(exerciseName: ex.name, priority: idx+1, sets: nil, reasoning: "Available exercise")
                 }
             }
+            // Clear volume metadata on failure
+            self.totalSetsRecommended = nil
+            self.targetSetsRange = nil
             self.error = error.localizedDescription
         }
     }
@@ -361,4 +375,223 @@ struct ExerciseDebug {
     let matchedCount: Int
     let allForTypeCount: Int
     let error: String?
+}
+
+// MARK: - Smart Recommendation (Home)
+struct SmartWorkoutRecommendation {
+    let workoutType: String
+    let muscleGroups: [String]
+    let daysSinceLastTrained: Int
+    let reasoning: String
+    let suggestedExercises: [(name: String, sets: Int)]
+}
+
+extension WorkoutManager {
+    func getSmartRecommendation() async -> SmartWorkoutRecommendation? {
+        guard let profile = profile else { return nil }
+        let userId = profile.id
+        let cal = Calendar.current
+        let now = Date()
+        guard let weekAgo = cal.date(byAdding: .day, value: -7, to: now) else { return defaultRecommendation() }
+        do {
+            let sessions = try await SupabaseService.shared.getSessionsBetween(userId: userId, start: weekAgo, end: now).filter { $0.completedAt != nil }
+            if sessions.isEmpty { return defaultRecommendation() }
+            let lastTrained = analyzeLastTrainedDates(sessions: sessions)
+            guard let oldest = lastTrained.sorted(by: { $0.value < $1.value }).first else { return defaultRecommendation() }
+            let daysSince = cal.dateComponents([.day], from: oldest.value, to: now).day ?? 0
+            let (type, groups) = determineWorkoutType(primaryGroup: oldest.key)
+            let isDeload = await detectDeload(for: oldest.key, in: sessions)
+            let ex = await getSuggestedExercises(for: groups.first ?? oldest.key, isDeload: isDeload)
+            let reasoning: String
+            if daysSince >= 3 { reasoning = "✅ Optimal recovery window (\(daysSince) days since last \(oldest.key) workout)" }
+            else if daysSince >= 2 { reasoning = "⚠️ Adequate recovery (\(daysSince) days rest)" }
+            else { reasoning = "Consider training different muscle groups (only \(daysSince) days since last \(oldest.key) workout)" }
+            let finalReason = isDeload ? reasoning + " — last session was a deload, so volume is reduced today." : reasoning
+            return SmartWorkoutRecommendation(workoutType: type, muscleGroups: groups, daysSinceLastTrained: daysSince, reasoning: finalReason, suggestedExercises: ex)
+        } catch {
+            return defaultRecommendation()
+        }
+    }
+
+    private func analyzeLastTrainedDates(sessions: [WorkoutSession]) -> [String: Date] {
+        var last: [String: Date] = [:]
+        for s in sessions {
+            let groups = getMuscleGroupsForWorkoutType(s.workoutType)
+            for g in groups {
+                if let prev = last[g] {
+                    if s.startedAt > prev { last[g] = s.startedAt }
+                } else {
+                    last[g] = s.startedAt
+                }
+            }
+        }
+        return last
+    }
+
+    private func getMuscleGroupsForWorkoutType(_ type: String) -> [String] {
+        let t = type.lowercased()
+        if t.contains("push") { return ["chest", "shoulders", "triceps"] }
+        if t.contains("pull") { return ["back", "biceps", "shoulders"] }
+        if t.contains("leg") { return ["quads", "hamstrings", "glutes", "calves"] }
+        if t.contains("upper") { return ["chest", "back", "shoulders", "biceps", "triceps"] }
+        if t.contains("lower") { return ["quads", "hamstrings", "glutes", "calves"] }
+        return [t]
+    }
+
+    private func determineWorkoutType(primaryGroup: String) -> (type: String, groups: [String]) {
+        switch primaryGroup.lowercased() {
+        case "chest", "shoulders", "triceps": return ("push", ["chest", "shoulders", "triceps"])
+        case "back", "biceps": return ("pull", ["back", "biceps"])
+        case "quads", "hamstrings", "glutes", "calves": return ("legs", ["quads", "hamstrings", "glutes"]) // calves optional
+        default: return (primaryGroup.lowercased(), [primaryGroup])
+        }
+    }
+
+    private func getSuggestedExercises(for muscleGroup: String, isDeload: Bool) async -> [(name: String, sets: Int)] {
+        let goal = profile?.primaryGoal ?? .bulk
+        let level = profile?.fitnessLevel ?? .intermediate
+        let freq = max(profile?.workoutFrequency ?? 3, 1)
+        let rankedDetailsSlice = TrainingKnowledgeService.shared.getExercisesRanked(for: muscleGroup, goal: goal).prefix(3)
+        let rankedDetails = Array(rankedDetailsSlice)
+        let volume = TrainingKnowledgeService.shared.getVolumeLandmarks(for: muscleGroup, goal: goal, experience: level)
+        let weeklyMin = volume?.setsPerWeekRange.lowerBound ?? 10
+        var targetPerSession = max(weeklyMin / freq, 6)
+        if isDeload { targetPerSession = max(Int(Double(targetPerSession) * 0.7), 4) }
+
+        // Map research names to DB exercises to fetch history
+        var dbExercises: [String: Exercise] = [:]
+        if let all = try? await SupabaseService.shared.getAllExercises() {
+            for d in all {
+                dbExercises[d.name.lowercased()] = d
+            }
+        }
+
+        // Compute historical average sets per session for each candidate
+        struct Hist { let name: String; let avgSets: Double }
+        var history: [Hist] = []
+        let firstName = rankedDetails.first?.name
+        for (idx, ex) in rankedDetails.enumerated() {
+            let key = ex.name.lowercased()
+            if let match = dbExercises[key] {
+                if let uid = profile?.id, let sets = try? await SupabaseService.shared.getExerciseHistory(userId: uid, exerciseId: match.id, limit: 50) {
+                    // average sets per session (group by session)
+                    let grouped = Dictionary(grouping: sets, by: { $0.sessionId })
+                    let perSessionCounts = grouped.values.map { $0.count }
+                    if let avg = perSessionCounts.isEmpty ? nil : Double(perSessionCounts.reduce(0,+)) / Double(perSessionCounts.count) {
+                        history.append(Hist(name: ex.name, avgSets: max(avg, 2)))
+                        continue
+                    }
+                }
+            }
+            // No history fallback
+            let base = (idx == 0) ? 4.0 : 3.0
+            history.append(Hist(name: ex.name, avgSets: base))
+        }
+
+        // Scale historical averages to meet targetPerSession
+        let baseSum = history.reduce(0.0) { $0 + $1.avgSets }
+        var allocated: [(String, Int)] = []
+        if baseSum > 0 {
+            var total = 0
+            for h in history {
+                let raw = (Double(targetPerSession) * (h.avgSets / baseSum))
+                let sets = max(Int(round(raw)), h.name == firstName ? 3 : 2)
+                allocated.append((h.name, sets))
+                total += sets
+            }
+            // Adjust to match target exactly by +/- 1 on last items
+            var diff = targetPerSession - total
+            var i = 0
+            while diff != 0 && !allocated.isEmpty {
+                let idx = i % allocated.count
+                if diff > 0 {
+                    allocated[idx].1 += 1; diff -= 1
+                } else if diff < 0 {
+                    if allocated[idx].1 > (idx == 0 ? 3 : 2) { allocated[idx].1 -= 1; diff += 1 }
+                }
+                i += 1
+            }
+        }
+
+        return allocated.isEmpty ? history.map { ($0.name, Int($0.avgSets)) } : allocated
+    }
+
+    private func detectDeload(for muscleGroup: String, in sessions: [WorkoutSession]) async -> Bool {
+        // Find most recent session that included this muscle group
+        let candidates = sessions.sorted { $0.startedAt > $1.startedAt }
+        for s in candidates {
+            let groups = getMuscleGroupsForWorkoutType(s.workoutType)
+            if groups.contains(where: { $0 == muscleGroup || $0 == muscleGroup.lowercased() }) {
+                let notes = (s.notes ?? "").lowercased()
+                if notes.contains("deload") || notes.contains("recovery week") { return true }
+                if let plan = try? await SupabaseService.shared.getSessionPlan(sessionId: s.id) {
+                    let p = (plan.notes ?? "").lowercased()
+                    if p.contains("deload") || p.contains("recovery week") { return true }
+                }
+                return false
+            }
+        }
+        return false
+    }
+
+    private func defaultRecommendation() -> SmartWorkoutRecommendation {
+        SmartWorkoutRecommendation(
+            workoutType: "push",
+            muscleGroups: ["chest", "shoulders", "triceps"],
+            daysSinceLastTrained: 0,
+            reasoning: "Start your training journey!",
+            suggestedExercises: [("Barbell Bench Press", 3), ("Pull-Ups", 3), ("Back Squat", 3)]
+        )
+    }
+}
+
+// MARK: - Volume and Research Helpers (UI access)
+extension WorkoutManager {
+    func setsCompletedToday(for group: String) -> Int {
+        let key = group.lowercased()
+        let ids = Set(availableExercises.filter { $0.muscleGroup.lowercased() == key }.map { $0.id })
+        if ids.isEmpty {
+            // Fallback: count only current exercise sets
+            let curId = currentExercise?.id
+            return completedSets.filter { $0.exerciseId == curId }.count
+        }
+        return completedSets.filter { ids.contains($0.exerciseId) }.count
+    }
+
+    func volumeLandmarks(for group: String) -> VolumeLandmarks? {
+        guard let profile else { return nil }
+        return TrainingKnowledgeService.shared.getVolumeLandmarks(
+            for: group,
+            goal: profile.primaryGoal,
+            experience: profile.fitnessLevel
+        )
+    }
+
+    func researchDetails(for exerciseName: String) -> ExerciseDetail? {
+        TrainingKnowledgeService.shared.findExercise(named: exerciseName)
+    }
+
+    // MARK: - Volume progress helpers for ExerciseSelectionView
+    func getSetsCompletedForGroup(_ group: String) -> Int {
+        let lower = group.lowercased()
+        let groupExercises = completedSets.filter { set in
+            availableExercises.first(where: { $0.id == set.exerciseId })?.muscleGroup.lowercased() == lower
+        }
+        return groupExercises.count
+    }
+
+    func getVolumeTarget(for group: String) -> (min: Int, max: Int, status: String)? {
+        guard let profile else { return nil }
+        guard let landmarks = TrainingKnowledgeService.shared.getVolumeLandmarks(
+            for: group,
+            goal: profile.primaryGoal,
+            experience: profile.fitnessLevel
+        ) else { return nil }
+        let mavRange = landmarks.setsPerWeekRange
+        let sessionsPerWeek = profile.workoutFrequency >= 5 ? 2 : 1
+        let minSetsToday = mavRange.lowerBound / max(sessionsPerWeek, 1)
+        let maxSetsToday = mavRange.upperBound / max(sessionsPerWeek, 1)
+        let status = "Training \(sessionsPerWeek)x/week → \(mavRange.lowerBound)-\(mavRange.upperBound) total sets"
+        return (minSetsToday, maxSetsToday, status)
+    }
 }

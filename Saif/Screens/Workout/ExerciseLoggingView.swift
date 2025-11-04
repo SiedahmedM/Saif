@@ -18,13 +18,24 @@ struct ExerciseLoggingView: View {
                 Text(exercise.name).font(.system(size: 28, weight: .bold)).foregroundStyle(SAIFColors.text)
                 Text(exercise.muscleGroup.capitalized).foregroundStyle(SAIFColors.mutedText)
 
+                // Volume progress tracking
+                VolumeProgressCard(group: exercise.muscleGroup)
+
                 if let rec = workoutManager.setRepRecommendation {
                     CardView(title: "AI Recommendation") {
-                        HStack(spacing: SAIFSpacing.lg) {
-                            Text("Reps: \(rec.reps)")
-                            Text("Weight: \(Int(rec.weight))lbs")
-                            Text("Rest: \(rec.restSeconds)s")
-                        }.foregroundStyle(SAIFColors.text)
+                        VStack(alignment: .leading, spacing: SAIFSpacing.sm) {
+                            HStack(spacing: SAIFSpacing.lg) {
+                                Text("Reps: \(rec.reps)")
+                                Text("Weight: \(Int(rec.weight))lbs")
+                                Text("Rest: \(rec.restSeconds)s")
+                            }
+                            if !rec.notes.isEmpty {
+                                Text(rec.notes)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(SAIFColors.mutedText)
+                            }
+                        }
+                        .foregroundStyle(SAIFColors.text)
                     }
                 }
 
@@ -74,3 +85,46 @@ struct ExerciseLoggingView: View {
 }
 
 #Preview { NavigationStack { ExerciseLoggingView(exercise: Exercise(id: UUID(), name: "Bench Press", muscleGroup: "chest", workoutType: "push", equipment: [], difficulty: .beginner, isCompound: true, description: "", formCues: [])).environmentObject(WorkoutManager()) } }
+
+// MARK: - Volume Progress Card
+private struct VolumeProgressCard: View {
+    @EnvironmentObject var workoutManager: WorkoutManager
+    let group: String
+
+    private func parseUpperBound(from range: String) -> Int? {
+        // Handles formats like "8-10" or "8–10" or "8 to 10"
+        let digits = range.replacingOccurrences(of: "to", with: "-").replacingOccurrences(of: "–", with: "-")
+        let parts = digits.split(separator: "-")
+        if let last = parts.last, let val = Int(last.filter({ $0.isNumber })) { return val }
+        return Int(digits.filter({ $0.isNumber }))
+    }
+
+    var body: some View {
+        let today = workoutManager.setsCompletedToday(for: group)
+        let landmarks = workoutManager.volumeLandmarks(for: group)
+        let sessionRange = workoutManager.targetSetsRange
+        let sessionCap = sessionRange.flatMap(parseUpperBound)
+        return AnyView(
+            Group {
+                if landmarks != nil || sessionRange != nil {
+                    CardView(title: "Volume Progress") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if let cap = sessionCap {
+                                Text("📊 \(group.capitalized) Volume Today: \(today)/\(cap) sets")
+                            } else {
+                                Text("📊 \(group.capitalized) Volume Today: \(today) sets")
+                            }
+                            if let s = sessionRange { Text("Target this session: \(s) sets") }
+                            if let lm = landmarks {
+                                Text("Target: \(TextSanitizer.sanitizedResearchText(lm.mav)) (MAV range)")
+                                Text("\(TextSanitizer.sanitizedResearchText(lm.frequencyRecommendation))")
+                                    .foregroundStyle(SAIFColors.mutedText)
+                            }
+                        }
+                        .foregroundStyle(SAIFColors.text)
+                    }
+                }
+            }
+        )
+    }
+}

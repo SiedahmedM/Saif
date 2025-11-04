@@ -7,6 +7,9 @@ struct ExerciseSelectionView: View {
     @State private var selectedExercise: Exercise?
     @State private var goSummary = false
     @State private var goNextGroups = false
+    @State private var showInfo = false
+    @State private var infoDetail: ExerciseDetail? = nil
+    @State private var infoIsCompound: Bool = true
 
     var body: some View {
         ZStack { SAIFColors.background.ignoresSafeArea()
@@ -14,6 +17,13 @@ struct ExerciseSelectionView: View {
                 VStack(alignment: .leading, spacing: SAIFSpacing.lg) {
                     Text(muscleGroup.capitalized).font(.system(size: 28, weight: .bold)).foregroundStyle(SAIFColors.text)
                     Text("Pick one to begin sets").foregroundStyle(SAIFColors.mutedText)
+
+                    // Volume Progress Card
+                    SelectionVolumeProgressCard(
+                        muscleGroup: muscleGroup,
+                        setsCompleted: workoutManager.getSetsCompletedForGroup(muscleGroup),
+                        targetRange: workoutManager.getVolumeTarget(for: muscleGroup)
+                    )
 
                     if let dbg = workoutManager.exerciseDebug {
                         CardView(title: "Debug: Supabase Query") {
@@ -53,18 +63,33 @@ struct ExerciseSelectionView: View {
                         } label: {
                             let exId = workoutManager.availableExercises.first{ $0.name == rec.exerciseName }?.id
                             let isDone = exId.map { workoutManager.completedExerciseIds.contains($0) } ?? false
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(rec.exerciseName)
-                                        .foregroundStyle(isDone ? SAIFColors.mutedText : SAIFColors.text)
-                                        .font(.system(size: 18, weight: .semibold))
-                                    HStack(spacing: 8) {
-                                        Text("Priority \(rec.priority)").foregroundStyle(SAIFColors.mutedText).font(.system(size: 14))
-                                        if isDone { Text("Completed").font(.system(size: 12, weight: .bold)).foregroundStyle(SAIFColors.primary) }
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(rec.exerciseName)
+                                            .foregroundStyle(isDone ? SAIFColors.mutedText : SAIFColors.text)
+                                            .font(.system(size: 18, weight: .semibold))
+                                        HStack(spacing: 8) {
+                                            Text("Priority \(rec.priority)").foregroundStyle(SAIFColors.mutedText).font(.system(size: 14))
+                                            if let sets = rec.sets { Text("Sets: \(sets)").foregroundStyle(SAIFColors.mutedText).font(.system(size: 14)) }
+                                            if isDone { Text("Completed").font(.system(size: 12, weight: .bold)).foregroundStyle(SAIFColors.primary) }
+                                        }
+                                    }
+                                    Spacer()
+                                    HStack(spacing: 12) {
+                                        Button {
+                                            let ex = workoutManager.availableExercises.first{ $0.name == rec.exerciseName }
+                                            infoIsCompound = ex?.isCompound ?? true
+                                            infoDetail = workoutManager.researchDetails(for: rec.exerciseName)
+                                            showInfo = true
+                                        } label: {
+                                            Image(systemName: "info.circle")
+                                                .foregroundStyle(SAIFColors.primary)
+                                        }
+                                        Image(systemName: "chevron.right").foregroundStyle(SAIFColors.mutedText)
                                     }
                                 }
-                                Spacer()
-                                Image(systemName: "chevron.right").foregroundStyle(SAIFColors.mutedText)
+                                // Reasoning moved to info sheet for clarity
                             }
                                 .padding(SAIFSpacing.lg)
                                 .background(SAIFColors.surface)
@@ -118,6 +143,9 @@ struct ExerciseSelectionView: View {
         .navigationTitle("SAIF")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("End") { goSummary = true } }
+        .sheet(isPresented: $showInfo) {
+            ResearchInfoView(exercise: infoDetail, isCompound: infoIsCompound)
+        }
         .background(
             Group {
                 NavigationLink(isActive: $goSummary) { WorkoutSummaryView() } label: { EmptyView() }
@@ -133,3 +161,98 @@ struct ExerciseSelectionView: View {
 }
 
 #Preview { NavigationStack { ExerciseSelectionView(muscleGroup: "chest").environmentObject(WorkoutManager()) } }
+
+// MARK: - Volume Progress Card (ExerciseSelection)
+private struct SelectionVolumeProgressCard: View {
+    let muscleGroup: String
+    let setsCompleted: Int
+    let targetRange: (min: Int, max: Int, status: String)?
+
+    var body: some View {
+        CardView(title: "📊 \(muscleGroup.capitalized) Volume Progress") {
+            VStack(alignment: .leading, spacing: SAIFSpacing.md) {
+                if let target = targetRange {
+                    // Progress text
+                    HStack {
+                        Text("Today:")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("\(setsCompleted) / \(target.min)-\(target.max) sets")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(SAIFColors.primary)
+                        Spacer()
+                        Text("\(progressPercentage(target))%")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(SAIFColors.mutedText)
+                    }
+                    // Progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(SAIFColors.border)
+                                .frame(height: 12)
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(progressColor(target))
+                                .frame(width: geometry.size.width * CGFloat(progressPercentage(target)) / 100, height: 12)
+                        }
+                    }
+                    .frame(height: 12)
+                    // Status message
+                    HStack(spacing: 6) {
+                        Text(statusIcon(target))
+                            .font(.system(size: 14))
+                        Text(statusMessage(target))
+                            .font(.system(size: 14))
+                            .foregroundStyle(SAIFColors.mutedText)
+                    }
+                    .padding(.top, 4)
+                    // Weekly context
+                    Text(target.status)
+                        .font(.system(size: 12))
+                        .foregroundStyle(SAIFColors.mutedText)
+                        .padding(.top, 2)
+                } else {
+                    // Fallback if no research data
+                    HStack {
+                        Text("Today:")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("\(setsCompleted) sets completed")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(SAIFColors.primary)
+                    }
+                    Text("Keep going! Aim for 10-20 sets per muscle group per week.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(SAIFColors.mutedText)
+                        .padding(.top, 4)
+                }
+            }
+        }
+    }
+
+    private func progressPercentage(_ target: (min: Int, max: Int, status: String)) -> Int {
+        let targetMidpoint = max((target.min + target.max) / 2, 1)
+        let percentage = min(Int(Double(setsCompleted) / Double(targetMidpoint) * 100), 100)
+        return max(percentage, 0)
+    }
+
+    private func progressColor(_ target: (min: Int, max: Int, status: String)) -> Color {
+        if setsCompleted < target.min {
+            return SAIFColors.accent.opacity(0.6)
+        } else if setsCompleted <= target.max {
+            return SAIFColors.primary
+        } else {
+            return Color.orange
+        }
+    }
+
+    private func statusIcon(_ target: (min: Int, max: Int, status: String)) -> String {
+        if setsCompleted < target.min { return "🎯" }
+        else if setsCompleted <= target.max { return "✅" }
+        else { return "⚠️" }
+    }
+
+    private func statusMessage(_ target: (min: Int, max: Int, status: String)) -> String {
+        if setsCompleted < target.min { return "Approaching optimal volume" }
+        else if setsCompleted <= target.max { return "Optimal range for growth" }
+        else { return "High volume - watch recovery" }
+    }
+}

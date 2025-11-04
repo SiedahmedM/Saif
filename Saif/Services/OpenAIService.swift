@@ -33,7 +33,7 @@ class OpenAIService {
         muscleGroup: String,
         availableExercises: [Exercise],
         recentSets: [ExerciseSet]
-    ) async throws -> [ExerciseRecommendation] {
+    ) async throws -> ExerciseRecommendationResponse {
         // Query research knowledge; gracefully fallback if unavailable
         let researchExercises = TrainingKnowledgeService.shared.getExercisesRanked(
             for: muscleGroup,
@@ -75,7 +75,7 @@ class OpenAIService {
             userPrompt: prompt
         )
 
-        return try parseExerciseRecommendations(from: response)
+        return try parseExerciseRecommendationResponse(from: response)
     }
 
     // MARK: - Set/Rep Recommendation
@@ -498,10 +498,10 @@ class OpenAIService {
         guard let data = json.data(using: .utf8) else { throw OpenAIError.parseError }
         return try JSONDecoder().decode(WorkoutRecommendation.self, from: data)
     }
-    private func parseExerciseRecommendations(from json: String) throws -> [ExerciseRecommendation] {
+    private func parseExerciseRecommendationResponse(from json: String) throws -> ExerciseRecommendationResponse {
         guard let data = json.data(using: .utf8) else { throw OpenAIError.parseError }
         let response = try JSONDecoder().decode(ExerciseRecommendationResponse.self, from: data)
-        return response.recommendations
+        return response
     }
     private func parseSetRepRecommendation(from json: String) throws -> SetRepRecommendation {
         guard let data = json.data(using: .utf8) else { throw OpenAIError.parseError }
@@ -564,7 +564,7 @@ struct WorkoutRecommendation: Decodable, Equatable {
         progressMessage = try? c.decode(String.self, forKey: .progressMessage)
     }
 }
-struct ExerciseRecommendation: Codable, Identifiable {
+struct ExerciseRecommendation: Decodable, Identifiable {
     var id: String { exerciseName }
     let exerciseName: String
     let priority: Int
@@ -588,13 +588,16 @@ struct ExerciseRecommendation: Codable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.exerciseName = (try? c.decode(String.self, forKey: .exerciseName)) ?? (try c.decode(String.self, forKey: .exerciseNameCamel))
+        // Prefer snake_case, fallback to camelCase, default empty on failure
+        let snake = try? c.decode(String.self, forKey: .exerciseName)
+        let camel = try? c.decode(String.self, forKey: .exerciseNameCamel)
+        self.exerciseName = snake ?? camel ?? ""
         self.priority = (try? c.decode(Int.self, forKey: .priority)) ?? 1
         self.sets = try? c.decode(Int.self, forKey: .sets)
         self.reasoning = (try? c.decode(String.self, forKey: .reasoning)) ?? ""
     }
 }
-struct ExerciseRecommendationResponse: Codable {
+struct ExerciseRecommendationResponse: Decodable {
     let recommendations: [ExerciseRecommendation]
     let totalSets: Int?
     let targetSetsRange: String?
@@ -605,8 +608,8 @@ struct ExerciseRecommendationResponse: Codable {
         case targetSetsRange = "target_sets_range"
     }
 }
-struct SetRepRecommendation: Codable { let sets: Int; let reps: Int; let weight: Double; let restSeconds: Int; let notes: String }
-struct MuscleGroupPriorityResponse: Codable { let priorityOrder: [String] }
+struct SetRepRecommendation: Decodable { let sets: Int; let reps: Int; let weight: Double; let restSeconds: Int; let notes: String }
+struct MuscleGroupPriorityResponse: Decodable { let priorityOrder: [String] }
 
 // MARK: - Errors
 enum OpenAIError: Error, LocalizedError {
