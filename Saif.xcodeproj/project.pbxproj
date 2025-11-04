@@ -32,7 +32,7 @@
 		BC6F78DB2EB6A64300304706 /* Saif.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Saif.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC6F78EB2EB6A64400304706 /* SaifTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaifTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC6F78F52EB6A64400304706 /* SaifUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaifUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		D0K0WLEF0001 /* Knowledge */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Saif/Knowledge; sourceTree = SOURCE_ROOT; };
+		D0K0WLEF0001 /* Knowledge */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Knowledge; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
