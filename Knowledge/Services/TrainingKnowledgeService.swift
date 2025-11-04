@@ -22,7 +22,6 @@ final class TrainingKnowledgeService {
                 let parsed = try decoder.decode(ExerciseSelectionKnowledge.self, from: data)
                 queue.async(flags: .barrier) { self.knowledge = parsed }
                 print("✅ TrainingKnowledgeService: Loaded exercise selection knowledge")
-                return
             } catch {
                 print("⚠️ TrainingKnowledgeService: JSON invalid, using fallback dataset")
                 // Fall through to fallback data
