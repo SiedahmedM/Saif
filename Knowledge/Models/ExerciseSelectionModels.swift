@@ -6,10 +6,11 @@ struct ExerciseSelectionKnowledge: Codable {
     let back: MuscleGroupExercises
     let shoulders: MuscleGroupExercises
     let quads: MuscleGroupExercises
+    let hamstrings: MuscleGroupExercises?
     let exerciseOrderingResearch: ExerciseOrderingResearch
 
     enum CodingKeys: String, CodingKey {
-        case chest, back, shoulders, quads
+        case chest, back, shoulders, quads, hamstrings
         case exerciseOrderingResearch = "exercise_ordering_research"
     }
 }
@@ -108,4 +109,3 @@ struct ExerciseOrderingResearch: Codable {
 
 // MARK: - Supporting Types
 enum ExerciseType { case compound, accessory, all }
-

@@ -86,7 +86,7 @@ final class TrainingKnowledgeService {
             compoundVsIsolationTiming: "Isolation after compounds for focused fatigue"
         )
 
-        return ExerciseSelectionKnowledge(chest: chest, back: back, shoulders: shoulders, quads: quads, exerciseOrderingResearch: ordering)
+        return ExerciseSelectionKnowledge(chest: chest, back: back, shoulders: shoulders, quads: quads, hamstrings: nil, exerciseOrderingResearch: ordering)
     }
 
     // Testing/debug helper
@@ -124,7 +124,8 @@ final class TrainingKnowledgeService {
 
     func findExercise(named name: String) -> ExerciseDetail? {
         guard let k = queue.sync(execute: { knowledge }) else { return nil }
-        let groups = [k.chest, k.back, k.shoulders, k.quads]
+        var groups = [k.chest, k.back, k.shoulders, k.quads]
+        if let h = k.hamstrings { groups.append(h) }
         for g in groups {
             if let ex = (g.topCompoundExercises + g.topAccessoryExercises).first(where: { $0.name.lowercased().contains(name.lowercased()) }) {
                 return ex
@@ -140,6 +141,7 @@ final class TrainingKnowledgeService {
         case "back": return k.back
         case "shoulders", "delts": return k.shoulders
         case "quads", "legs": return k.quads
+        case "hamstrings", "hams", "posterior chain": return k.hamstrings
         default: return nil
         }
     }
@@ -151,6 +153,7 @@ final class TrainingKnowledgeService {
         case "back", "lats", "traps": return "back"
         case "shoulders", "delts", "deltoids": return "shoulders"
         case "quads", "legs", "quadriceps", "thighs": return "quads"
+        case "hamstrings", "hams", "posterior chain", "hamstring": return "hamstrings"
         default: return g
         }
     }
