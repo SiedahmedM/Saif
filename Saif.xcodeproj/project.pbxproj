@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D0C0FF021234567890ABCDEF /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = D0C0FF011234567890ABCDEF /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		BC6F78EC2EB6A64400304706 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D0C0FF021234567890ABCDEF /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = Saif;
 			packageProductDependencies = (
+				D0C0FF011234567890ABCDEF /* Supabase */,
 			);
 			productName = Saif;
 			productReference = BC6F78DB2EB6A64300304706 /* Saif.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = BC6F78D22EB6A64300304706;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D0C0FF001234567890ABCDEF /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BC6F78DC2EB6A64300304706 /* Products */;
 			projectDirPath = "";
@@ -558,6 +567,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D0C0FF001234567890ABCDEF /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase-community/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D0C0FF011234567890ABCDEF /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D0C0FF001234567890ABCDEF /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BC6F78D32EB6A64300304706 /* Project object */;
 }

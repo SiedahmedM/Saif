@@ -1,7 +1,10 @@
 import SwiftUI
 
 struct WelcomeView: View {
+    @EnvironmentObject var authManager: AuthManager
     @State private var navigateTo: Goal?
+    @State private var startWorkout = false
+    @State private var showGoalSelection = false
 
     var body: some View {
         ZStack {
@@ -18,12 +21,17 @@ struct WelcomeView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                CardView(title: "What’s your current goal?") {
-                    VStack(spacing: SAIFSpacing.md) {
-                        PrimaryButton("Bulk") { navigateTo = .bulk }
-                        PrimaryButton("Cut", variant: .accent) { navigateTo = .cut }
-                        PrimaryButton("Maintain", variant: .outline) { navigateTo = .maintain }
+                VStack(spacing: SAIFSpacing.lg) {
+                    if let currentGoal = authManager.userProfile?.primaryGoal {
+                        Text("Current Goal: \(currentGoal.displayName)")
+                            .font(.system(size: 16))
+                            .foregroundStyle(SAIFColors.mutedText)
                     }
+
+                    PrimaryButton("Start Workout") { startWorkout = true }
+
+                    Button("Change Goal") { showGoalSelection = true }
+                        .foregroundStyle(SAIFColors.mutedText)
                 }
 
                 Spacer()
@@ -33,14 +41,51 @@ struct WelcomeView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             }
             .padding(SAIFSpacing.xl)
-            .navigationDestination(item: $navigateTo) { goal in
-                WorkoutCheckinView(goal: goal)
+            .navigationDestination(isPresented: $startWorkout) {
+                WorkoutStartView(selectedPreset: nil)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar {
+            NavigationLink(destination: CalendarHistoryView()) {
+                Image(systemName: "calendar")
+            }
+        }
+        .sheet(isPresented: $showGoalSelection) {
+            GoalChangeSheet()
+                .presentationDetents([.fraction(0.45)])
+        }
     }
 }
 
 #Preview {
-    NavigationStack { WelcomeView() }
+    NavigationStack { 
+        WelcomeView()
+            .environmentObject(WorkoutManager())
+    }
+}
+
+// MARK: - Goal Change
+private struct GoalChangeSheet: View {
+    @EnvironmentObject var authManager: AuthManager
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(spacing: SAIFSpacing.lg) {
+            Text("Change Goal").font(.system(size: 20, weight: .semibold))
+            ForEach([Goal.bulk, .cut, .maintain], id: \.self) { g in
+                PrimaryButton(g.displayName) {
+                    Task {
+                        if var p = authManager.userProfile {
+                            p.primaryGoal = g
+                            try? await SupabaseService.shared.updateProfile(p)
+                            authManager.userProfile = p
+                        }
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .padding(SAIFSpacing.xl)
+        .background(SAIFColors.background)
+    }
 }

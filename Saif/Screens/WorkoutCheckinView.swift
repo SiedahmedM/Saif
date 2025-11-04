@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WorkoutCheckinView: View {
     let goal: Goal
+    @EnvironmentObject var workoutManager: WorkoutManager
 
     var body: some View {
         ZStack {
@@ -11,21 +12,21 @@ struct WorkoutCheckinView: View {
                     Text("Workout Check‑in")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(SAIFColors.text)
-                    Text("Goal: \(goal.rawValue)")
+                    Text("Goal: \(goal.displayName)")
                         .font(.system(size: 16))
                         .foregroundStyle(SAIFColors.mutedText)
 
-                    WorkoutCard(title: "Push Day", subtitle: "Chest • Shoulders • Triceps", preset: .push)
-                    WorkoutCard(title: "Pull Day", subtitle: "Back • Biceps • Rear Delts", preset: .pull)
-                    WorkoutCard(title: "Legs", subtitle: "Quads • Hamstrings • Glutes • Calves", preset: .legs)
+                    WorkoutCard(title: Preset.push.displayName, subtitle: "Chest • Shoulders • Triceps", preset: .push)
+                    WorkoutCard(title: Preset.pull.displayName, subtitle: "Back • Biceps • Rear Delts", preset: .pull)
+                    WorkoutCard(title: Preset.legs.displayName, subtitle: "Quads • Hamstrings • Glutes • Calves", preset: .legs)
                 }
                 .padding(SAIFSpacing.xl)
             }
         }
         .navigationTitle("SAIF")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: Preset.self) { p in
-            MuscleMapView(preset: p)
+        .navigationDestination(for: Preset.self) { preset in
+            WorkoutStartView(selectedPreset: preset)
         }
     }
 }
@@ -71,6 +72,8 @@ private struct WorkoutCard: View {
 }
 
 #Preview {
-    NavigationStack { WorkoutCheckinView(goal: .bulk) }
+    NavigationStack { 
+        WorkoutCheckinView(goal: .bulk)
+            .environmentObject(WorkoutManager())
+    }
 }
-

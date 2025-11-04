@@ -9,12 +9,15 @@ import SwiftUI
 
 @main
 struct SaifApp: App {
+    @StateObject private var authManager = AuthManager()
+    @StateObject private var workoutManager = WorkoutManager()
+
     var body: some Scene {
         WindowGroup {
-            NavigationStack {
-                WelcomeView()
-            }
-            .tint(SAIFColors.primary)
+            NavigationStack { AuthFlowView() }
+                .environmentObject(authManager)
+                .environmentObject(workoutManager)
+                .tint(SAIFColors.primary)
         }
     }
 }
