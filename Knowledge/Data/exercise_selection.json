@@ -1,0 +1,28 @@
+{
+  "chest": {
+    "top_compound_exercises": [],
+    "top_accessory_exercises": [],
+    "exercise_substitutions": []
+  },
+  "back": {
+    "top_compound_exercises": [],
+    "top_accessory_exercises": [],
+    "exercise_substitutions": []
+  },
+  "shoulders": {
+    "top_compound_exercises": [],
+    "top_accessory_exercises": [],
+    "exercise_substitutions": []
+  },
+  "quads": {
+    "top_compound_exercises": [],
+    "top_accessory_exercises": [],
+    "exercise_substitutions": []
+  },
+  "exercise_ordering_research": {
+    "optimal_sequence": "",
+    "fatigue_management": "",
+    "compound_vs_isolation_timing": ""
+  }
+}
+
