@@ -328,6 +328,85 @@ class SupabaseService {
         let recent = try await getRecentWorkoutSessions(userId: userId, limit: 200)
         return recent.filter { $0.startedAt >= start && $0.startedAt < end }
     }
+
+    // MARK: - Session Plans
+
+    struct SessionPlanCreate: Encodable {
+        let session_id: String
+        let user_id: String
+        let workout_type: String
+        let target_sets_min: Int
+        let target_sets_max: Int
+        let total_sets_planned: Int
+        let volume_context: VolumeContext
+        let exercises: [PlanExercise]
+        let notes: String?
+    }
+
+    struct SessionPlanUpdate: Encodable {
+        let target_sets_min: Int?
+        let target_sets_max: Int?
+        let total_sets_planned: Int?
+        let volume_context: VolumeContext?
+        let exercises: [PlanExercise]?
+        let notes: String?
+        let updated_at: Date = Date()
+    }
+
+    func upsertSessionPlan(
+        sessionId: UUID,
+        userId: UUID,
+        workoutType: String,
+        targetMin: Int,
+        targetMax: Int,
+        totalSets: Int,
+        volume: VolumeContext,
+        items: [PlanExercise],
+        notes: String?
+    ) async throws -> SessionPlan {
+        let payload = SessionPlanCreate(
+            session_id: sessionId.uuidString,
+            user_id: userId.uuidString,
+            workout_type: workoutType,
+            target_sets_min: targetMin,
+            target_sets_max: targetMax,
+            total_sets_planned: totalSets,
+            volume_context: volume,
+            exercises: items,
+            notes: notes
+        )
+        let response: SessionPlan = try await client.database
+            .from("session_plans")
+            .upsert(payload, onConflict: "session_id")
+            .select()
+            .single()
+            .execute()
+            .value
+        return response
+    }
+
+    func getSessionPlan(sessionId: UUID) async throws -> SessionPlan? {
+        let rows: [SessionPlan] = try await client.database
+            .from("session_plans")
+            .select()
+            .eq("session_id", value: sessionId.uuidString)
+            .limit(1)
+            .execute()
+            .value
+        return rows.first
+    }
+
+    func updateSessionPlan(sessionId: UUID, update: SessionPlanUpdate) async throws -> SessionPlan {
+        let response: SessionPlan = try await client.database
+            .from("session_plans")
+            .update(update)
+            .eq("session_id", value: sessionId.uuidString)
+            .select()
+            .single()
+            .execute()
+            .value
+        return response
+    }
 }
 
 // MARK: - Custom Errors

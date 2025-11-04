@@ -131,7 +131,7 @@ class WorkoutManager: ObservableObject {
                             if used.insert(match.name.lowercased()).inserted {
                                 let emgFirst = TextSanitizer.firstSentence(from: rex.emgActivation)
                                 let reason = "\(match.isCompound ? "Compound" : "Isolation"): \(emgFirst). Hypertrophy: \(rex.effectiveness.hypertrophy), Strength: \(rex.effectiveness.strength). Safety: \(rex.safetyLevel.rawValue)."
-                                recs.append(ExerciseRecommendation(exerciseName: match.name, priority: recs.count+1, reasoning: reason))
+                                recs.append(ExerciseRecommendation(exerciseName: match.name, priority: recs.count+1, sets: nil, reasoning: reason))
                             }
                         }
                         if recs.count >= 5 { break }
@@ -140,7 +140,7 @@ class WorkoutManager: ObservableObject {
                 }
                 if exerciseRecommendations.isEmpty {
                     exerciseRecommendations = exercises.prefix(5).enumerated().map { idx, ex in
-                        ExerciseRecommendation(exerciseName: ex.name, priority: idx+1, reasoning: "Available exercise")
+                        ExerciseRecommendation(exerciseName: ex.name, priority: idx+1, sets: nil, reasoning: "Available exercise")
                     }
                 }
             }
@@ -187,7 +187,7 @@ class WorkoutManager: ObservableObject {
                         if used.insert(match.name.lowercased()).inserted {
                             let emgFirst = TextSanitizer.firstSentence(from: rex.emgActivation)
                             let reason = "\(match.isCompound ? "Compound" : "Isolation"): \(emgFirst). Hypertrophy: \(rex.effectiveness.hypertrophy), Strength: \(rex.effectiveness.strength). Safety: \(rex.safetyLevel.rawValue)."
-                            recs.append(ExerciseRecommendation(exerciseName: match.name, priority: recs.count+1, reasoning: reason))
+                            recs.append(ExerciseRecommendation(exerciseName: match.name, priority: recs.count+1, sets: nil, reasoning: reason))
                         }
                     }
                     if recs.count >= 5 { break }
@@ -197,7 +197,7 @@ class WorkoutManager: ObservableObject {
             // If still empty, show first few available exercises plainly
             if exerciseRecommendations.isEmpty && !availableExercises.isEmpty {
                 exerciseRecommendations = availableExercises.prefix(5).enumerated().map { idx, ex in
-                    ExerciseRecommendation(exerciseName: ex.name, priority: idx+1, reasoning: "Available exercise")
+                    ExerciseRecommendation(exerciseName: ex.name, priority: idx+1, sets: nil, reasoning: "Available exercise")
                 }
             }
             self.error = error.localizedDescription
@@ -283,15 +283,46 @@ class WorkoutManager: ObservableObject {
     }
 
     func recommendExerciseCount(for group: String) -> (count: Int, reason: String) {
-        // Simple heuristic: beginners lower volume, bulk higher volume; frequency balances volume
-        let exp = profile?.fitnessLevel ?? .beginner
-        let goal = profile?.primaryGoal ?? .maintain
-        let freq = profile?.workoutFrequency ?? 3
+        guard let profile = profile else {
+            return (3, "Default recommendation")
+        }
+
+        // NEW: Query volume landmarks from research
+        if let landmarks = TrainingKnowledgeService.shared.getVolumeLandmarks(
+            for: group,
+            goal: profile.primaryGoal,
+            experience: profile.fitnessLevel
+        ) {
+            let count = landmarks.exerciseCount
+            let eps = TextSanitizer.sanitizedResearchText(landmarks.exercisesPerSession)
+            let mav = TextSanitizer.sanitizedResearchText(landmarks.mav)
+            let sps = TextSanitizer.sanitizedResearchText(landmarks.setsPerSessionRange)
+            let reason = """
+            Research recommends \(eps) for \(displayName(group)) at your \(profile.fitnessLevel.displayName) level with \(profile.primaryGoal.displayName) goal.
+
+            Volume targets:
+            • Optimal weekly sets: \(mav) (Maximum Adaptive Volume)
+            • Sets per session: \(sps)
+            • This allows progressive overload within your recovery capacity.
+            """
+            return (count, reason)
+        }
+
+        // Fallback to existing heuristic if no research data
+        let exp = profile.fitnessLevel
+        let goal = profile.primaryGoal
+        let freq = profile.workoutFrequency
+
         var base = exp == .beginner ? 2 : (exp == .intermediate ? 3 : 4)
         if goal == .bulk { base += 1 }
         if freq >= 5 { base = max(2, base - 1) }
-        let reason = "Based on your \(exp.displayName.lowercased()) level, \(goal.displayName.lowercased()) goal, and training \(freq)x/week, \(base) exercises for \(group.replacingOccurrences(of: "_", with: " ")) balances stimulus and recovery."
-        return (min(max(base,1),5), reason)
+
+        let reason = "Based on your \(exp.displayName.lowercased()) level, \(goal.displayName.lowercased()) goal, and training \(freq)x/week, \(base) exercises for \(displayName(group)) balances stimulus and recovery."
+        return (min(max(base, 1), 5), reason)
+    }
+
+    private func displayName(_ key: String) -> String {
+        key.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     func selectExercise(_ exercise: Exercise) async { currentExercise = exercise; await getSetRepRecommendation(for: exercise) }

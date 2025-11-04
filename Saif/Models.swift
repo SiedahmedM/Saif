@@ -149,3 +149,75 @@ struct Stretch: Codable, Identifiable {
         case formCues = "form_cues"
     }
 }
+
+// MARK: - Session Plan Models (Supabase: session_plans)
+
+struct PlanExercise: Codable {
+    var exerciseId: UUID?
+    var exerciseName: String
+    var priority: Int
+    var sets: Int
+    var isCompound: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case exerciseId = "exercise_id"
+        case exerciseName = "exercise_name"
+        case priority
+        case sets
+        case isCompound = "is_compound"
+    }
+}
+
+struct VolumeContext: Codable {
+    var mav: String?
+    var setsPerSessionRange: String?
+    var exercisesPerSession: String?
+    var frequency: String?
+    var repRange: String?
+    var restBetweenSets: String?
+    var intensity: String?
+    var source: String?
+    var notes: String?
+
+    enum CodingKeys: String, CodingKey {
+        case mav
+        case setsPerSessionRange = "setsPerSessionRange"
+        case exercisesPerSession = "exercisesPerSession"
+        case frequency
+        case repRange = "repRange"
+        case restBetweenSets = "restBetweenSets"
+        case intensity
+        case source
+        case notes
+    }
+}
+
+struct SessionPlan: Codable, Identifiable {
+    let id: UUID
+    let sessionId: UUID
+    let userId: UUID
+    let workoutType: String
+    let targetSetsMin: Int
+    let targetSetsMax: Int
+    let totalSetsPlanned: Int
+    let volumeContext: VolumeContext
+    let exercises: [PlanExercise]
+    let notes: String?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case sessionId = "session_id"
+        case userId = "user_id"
+        case workoutType = "workout_type"
+        case targetSetsMin = "target_sets_min"
+        case targetSetsMax = "target_sets_max"
+        case totalSetsPlanned = "total_sets_planned"
+        case volumeContext = "volume_context"
+        case exercises
+        case notes
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}

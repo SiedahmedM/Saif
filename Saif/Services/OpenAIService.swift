@@ -247,7 +247,7 @@ class OpenAIService {
         previousSets: [ExerciseSet],
         researchData: ExerciseDetail?
     ) -> String {
-        let lastPerformance = previousSets.last.map { "\($0.setNumber) sets of \($0.reps) reps at \(Int($0.weight))lbs" } ?? "No previous data"
+        let lastPerformance = previousSets.last.map { "+\($0.setNumber) sets of \($0.reps) reps at \(Int($0.weight))lbs".replacingOccurrences(of: "+", with: "") } ?? "No previous data"
 
         var researchContext = ""
         if let research = researchData {
@@ -255,12 +255,34 @@ class OpenAIService {
                 .components(separatedBy: ". ")
                 .prefix(3)
                 .joined(separator: ". ")
+
             researchContext = """
 
             RESEARCH DATA FOR \(exercise.name):
             - Effectiveness: Hypertrophy (\(research.effectiveness.hypertrophy)), Strength (\(research.effectiveness.strength))
             - Safety Level: \(research.safetyLevel.rawValue)
             - Evidence-Based Progression: \(progressionSnippet)
+            """
+        }
+
+        // NEW: Add volume landmarks for rep/rest guidance
+        var volumeContext = ""
+        if let landmarks = TrainingKnowledgeService.shared.getVolumeLandmarks(
+            for: exercise.muscleGroup,
+            goal: profile.primaryGoal,
+            experience: profile.fitnessLevel
+        ) {
+            let repRange = TextSanitizer.sanitizedResearchText(landmarks.repRange)
+            let rest = TextSanitizer.sanitizedResearchText(landmarks.restBetweenSets)
+            let intensity = TextSanitizer.sanitizedResearchText(landmarks.intensityGuidance)
+            let mav = TextSanitizer.sanitizedResearchText(landmarks.mav)
+            volumeContext = """
+
+            VOLUME GUIDANCE FOR \(exercise.muscleGroup.capitalized):
+            - Target Rep Range: \(repRange)
+            - Rest Between Sets: \(rest)
+            - Intensity: \(intensity)
+            - Weekly Volume Target: \(mav)
             """
         }
 
@@ -276,17 +298,20 @@ class OpenAIService {
         EXERCISE: \(exercise.name)
         LAST PERFORMANCE: \(lastPerformance)
         \(researchContext)
+        \(volumeContext)
 
         Recommend sets, reps, and weight for today based on:
         1. Progressive overload principles for \(profile.fitnessLevel.rawValue) lifters
         2. User's \(profile.primaryGoal.rawValue) goal
-        3. Evidence-based progression from research (if available)
-        4. Last performance data
+        3. Evidence-based volume and intensity guidance
+        4. Last performance data (if available)
 
         Apply appropriate progression:
-        - Beginner: 2.5-5% increases when all reps completed
-        - Intermediate: Smaller increments, vary rep ranges
-        - Advanced: Periodization, auto-regulation
+        - Beginner: 2.5-5% weight increases when all reps completed with good form
+        - Intermediate: Smaller increments (2.5%), vary rep ranges within target
+        - Advanced: Periodization, auto-regulation, listen to recovery signals
+
+        Ensure recommendations align with the rep range and rest periods from research.
 
         Return JSON format:
         {
@@ -309,13 +334,12 @@ class OpenAIService {
         orderingPrinciples: ExerciseOrderingResearch?,
         recentSets: [ExerciseSet]
     ) -> String {
-        // Format top research exercises with key data
+        // Existing research exercise formatting...
         let researchContext = researchExercises.prefix(5).map { ex in
             let safetyEmoji = ex.safetyLevel == .low ? "✅" : ex.safetyLevel == .medium ? "⚠️" : "⚠️⚠️"
-            let activation = TextSanitizer.firstSentence(from: ex.emgActivation)
             return """
             • \(ex.name) \(safetyEmoji):
-              - Activation: \(activation)
+              - Activation: \(ex.emgActivation.components(separatedBy: ".").first ?? "High muscle activation")
               - Hypertrophy: \(ex.effectiveness.hypertrophy)
               - Strength: \(ex.effectiveness.strength)
               - Safety: \(ex.injuryRisk)
@@ -323,15 +347,49 @@ class OpenAIService {
             """
         }.joined(separator: "\n\n")
 
-        // Format available exercises from database
         let availableList = availableExercises.map { ex in
             "- \(ex.name) (\(ex.isCompound ? "compound" : "isolation"))"
         }.joined(separator: "\n")
 
-        // Exercise ordering guidance
-        let orderingGuidance = orderingPrinciples
-            .map { TextSanitizer.sanitizedResearchText($0.optimalSequence).components(separatedBy: ".").prefix(2).joined(separator: ". ") }
-            ?? "Prioritize compound exercises first, then isolation."
+        let orderingGuidance = orderingPrinciples?.optimalSequence.components(separatedBy: ".").prefix(2).joined(separator: ". ") ?? "Prioritize compound exercises first, then isolation."
+
+        // NEW: Add volume landmarks guidance
+        let volumeGuidance: String
+        if let landmarks = TrainingKnowledgeService.shared.getVolumeLandmarks(
+            for: muscleGroup,
+            goal: profile.primaryGoal,
+            experience: profile.fitnessLevel
+        ) {
+            let mav = TextSanitizer.sanitizedResearchText(landmarks.mav)
+            let sps = TextSanitizer.sanitizedResearchText(landmarks.setsPerSessionRange)
+            let eps = TextSanitizer.sanitizedResearchText(landmarks.exercisesPerSession)
+            let freq = TextSanitizer.sanitizedResearchText(landmarks.frequencyRecommendation)
+            let rep = TextSanitizer.sanitizedResearchText(landmarks.repRange)
+            let rest = TextSanitizer.sanitizedResearchText(landmarks.restBetweenSets)
+            let intensity = TextSanitizer.sanitizedResearchText(landmarks.intensityGuidance)
+            let notes = TextSanitizer.sanitizedResearchText(landmarks.notes)
+            volumeGuidance = """
+
+            VOLUME TARGETS (Evidence-Based - Mike Israetel Framework):
+            • Weekly Volume Range: \(mav) (Maximum Adaptive Volume for optimal growth)
+            • Sets Per Session: \(sps)
+            • Recommended Exercises: \(eps)
+            • Training Frequency: \(freq)
+            • Rep Range: \(rep)
+            • Rest Between Sets: \(rest)
+            • Intensity: \(intensity)
+
+            Context: \(notes)
+            """
+        } else {
+            volumeGuidance = """
+
+            VOLUME TARGETS (General Guidelines):
+            • Aim for 10-20 sets per muscle group per week
+            • 2-4 exercises per session
+            • 8-12 reps for hypertrophy, 60-120 seconds rest
+            """
+        }
 
         let goalContext = profile.primaryGoal == .bulk ? "maximize hypertrophy" :
                           profile.primaryGoal == .cut ? "maintain muscle while managing fatigue" :
@@ -345,6 +403,7 @@ class OpenAIService {
 
         EXERCISE ORDERING PRINCIPLE:
         \(orderingGuidance)
+        \(volumeGuidance)
 
         USER PROFILE:
         - Primary Goal: \(profile.primaryGoal.displayName) (\(goalContext))
@@ -356,20 +415,25 @@ class OpenAIService {
         \(availableList)
 
         TASK:
-        Recommend 3-5 exercises from the AVAILABLE DATABASE exercises, ordered by priority.
+        Recommend exercises from the AVAILABLE DATABASE, ordered by priority, with SET COUNTS for each.
 
-        Match research exercise names to available database exercises when possible.
-        For example: "Barbell Bench Press (Flat)" in research → "Barbell Bench Press" in database
+        Your recommendation should:
+        1. Match the recommended exercise count from volume targets
+        2. Distribute sets across exercises to reach the target sets per session
+        3. Prioritize compound exercises first (per ordering principles)
+        4. Match user's equipment and experience level
+        5. Reference research data (EMG, effectiveness) in your reasoning
 
-        Prioritize exercises that:
-        1. Have HIGH effectiveness ratings for \(profile.primaryGoal.rawValue) goal
-        2. Are appropriate for \(profile.fitnessLevel.rawValue) level
-        3. Match \(profile.gymType.rawValue) equipment
-        4. Follow evidence-based ordering (compounds before isolation)
-        5. Have good safety profiles for the user's experience level
+        Example format:
+        - Exercise 1 (compound): 4 sets - because [research reasoning]
+        - Exercise 2 (compound/accessory): 3 sets - because [research reasoning]
+        - Exercise 3 (isolation): 2 sets - because [research reasoning]
+        Total: 9 sets (within target range for optimal adaptation)
 
-        CRITICAL: Only recommend exercises that exist in the "AVAILABLE EXERCISES IN DATABASE" list.
-        Reference the research data to explain WHY each exercise is recommended.
+        CRITICAL: 
+        - Only recommend exercises from the "AVAILABLE EXERCISES IN DATABASE" list
+        - Specify set count for each exercise
+        - Explain how the total sets fit within the volume guidance
 
         Return JSON format:
         {
@@ -377,9 +441,12 @@ class OpenAIService {
                 {
                     "exercise_name": "Exact name from database",
                     "priority": 1,
-                    "reasoning": "Evidence-based explanation (reference EMG data or effectiveness rating)"
+                    "sets": 4,
+                    "reasoning": "Evidence-based explanation with EMG/effectiveness reference"
                 }
-            ]
+            ],
+            "total_sets": 9,
+            "target_sets_range": "8-10"
         }
         """
     }
@@ -497,8 +564,47 @@ struct WorkoutRecommendation: Decodable, Equatable {
         progressMessage = try? c.decode(String.self, forKey: .progressMessage)
     }
 }
-struct ExerciseRecommendation: Codable, Identifiable { var id: String { exerciseName }; let exerciseName: String; let priority: Int; let reasoning: String }
-struct ExerciseRecommendationResponse: Codable { let recommendations: [ExerciseRecommendation] }
+struct ExerciseRecommendation: Codable, Identifiable {
+    var id: String { exerciseName }
+    let exerciseName: String
+    let priority: Int
+    let sets: Int?
+    let reasoning: String
+
+    enum CodingKeys: String, CodingKey {
+        case exerciseName = "exercise_name"
+        case priority
+        case sets
+        case reasoning
+        case exerciseNameCamel = "exerciseName"
+    }
+
+    init(exerciseName: String, priority: Int, sets: Int? = nil, reasoning: String) {
+        self.exerciseName = exerciseName
+        self.priority = priority
+        self.sets = sets
+        self.reasoning = reasoning
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.exerciseName = (try? c.decode(String.self, forKey: .exerciseName)) ?? (try c.decode(String.self, forKey: .exerciseNameCamel))
+        self.priority = (try? c.decode(Int.self, forKey: .priority)) ?? 1
+        self.sets = try? c.decode(Int.self, forKey: .sets)
+        self.reasoning = (try? c.decode(String.self, forKey: .reasoning)) ?? ""
+    }
+}
+struct ExerciseRecommendationResponse: Codable {
+    let recommendations: [ExerciseRecommendation]
+    let totalSets: Int?
+    let targetSetsRange: String?
+
+    enum CodingKeys: String, CodingKey {
+        case recommendations
+        case totalSets = "total_sets"
+        case targetSetsRange = "target_sets_range"
+    }
+}
 struct SetRepRecommendation: Codable { let sets: Int; let reps: Int; let weight: Double; let restSeconds: Int; let notes: String }
 struct MuscleGroupPriorityResponse: Codable { let priorityOrder: [String] }
 
