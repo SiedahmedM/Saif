@@ -23,6 +23,15 @@ struct HomeDashboardView: View {
                 lastSession = try? await SupabaseService.shared.getLastCompletedSession(userId: id)
             }
         }
+        .task {
+            // Touch the knowledge singleton so it loads JSON and log a quick sanity check
+            _ = TrainingKnowledgeService.shared
+            if let ordering = TrainingKnowledgeService.shared.getOrderingPrinciples() {
+                print("Ordering OK:", ordering.optimalSequence.prefix(30), "…")
+            }
+            let chestCount = TrainingKnowledgeService.shared.getExercises(for: "chest").count
+            print("Chest research count:", chestCount)
+        }
         .overlay(alignment: .bottomTrailing) {
             Button { showChat = true } label: {
                 Image(systemName: "message.fill")
