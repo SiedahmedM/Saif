@@ -6,6 +6,7 @@ final class TrainingKnowledgeService {
     private var knowledge: ExerciseSelectionKnowledge?
     private let queue = DispatchQueue(label: "com.saif.trainingknowledge", attributes: .concurrent)
     private var usedFallback = false
+    private var volumeGuidelines: VolumeGuidelinesKnowledge?
 
     private init() {
         loadKnowledge()
@@ -37,6 +38,19 @@ final class TrainingKnowledgeService {
             self.usedFallback = true
         }
         print("✅ TrainingKnowledgeService: Loaded exercise selection knowledge")
+
+        // Load volume guidelines if available
+        if let volumeURL = Bundle.main.url(forResource: "volume_guidelines", withExtension: "json", subdirectory: "Knowledge/Data"),
+           let volumeData = try? Data(contentsOf: volumeURL) {
+            do {
+                let decoder = JSONDecoder()
+                let parsed = try decoder.decode(VolumeGuidelinesKnowledge.self, from: volumeData)
+                queue.async(flags: .barrier) { self.volumeGuidelines = parsed }
+                print("✅ TrainingKnowledgeService: Loaded volume guidelines")
+            } catch {
+                print("❌ TrainingKnowledgeService: Volume guidelines decode error: \(error)")
+            }
+        }
     }
 
     // Minimal safe dataset if JSON is invalid or missing
@@ -120,6 +134,32 @@ final class TrainingKnowledgeService {
 
     func getOrderingPrinciples() -> ExerciseOrderingResearch? {
         queue.sync { knowledge?.exerciseOrderingResearch }
+    }
+
+    // Volume guidelines queries
+    func getVolumeLandmarks(
+        for muscleGroup: String,
+        goal: Goal,
+        experience: FitnessLevel
+    ) -> VolumeLandmarks? {
+        guard let guidelines = queue.sync(execute: { volumeGuidelines }) else { return nil }
+        let normalizedGroup = normalizeMuscleGroup(muscleGroup)
+        guard let muscleVolume = guidelines.volumeGuidelines[normalizedGroup] else { return nil }
+        let goalVolume: GoalVolume
+        switch goal {
+        case .bulk: goalVolume = muscleVolume.bulk
+        case .cut: goalVolume = muscleVolume.cut
+        case .maintain: goalVolume = muscleVolume.maintain
+        }
+        switch experience {
+        case .beginner: return goalVolume.beginner
+        case .intermediate: return goalVolume.intermediate
+        case .advanced: return goalVolume.advanced
+        }
+    }
+
+    func getGeneralPrinciples() -> GeneralPrinciples? {
+        queue.sync { volumeGuidelines?.generalPrinciples }
     }
 
     func findExercise(named name: String) -> ExerciseDetail? {
