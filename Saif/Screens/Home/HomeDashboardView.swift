@@ -2,14 +2,20 @@ import SwiftUI
 
 struct HomeDashboardView: View {
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var workoutManager: WorkoutManager
     @State private var lastSession: WorkoutSession?
     @State private var showChat = false
+    @State private var tipText: String? = nil
+    @State private var showTip = false
 
     var body: some View {
         ZStack { SAIFColors.background.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: SAIFSpacing.lg) {
                     header
+                    if showTip, let tip = tipText {
+                        HStack { Spacer(); TipCardView(text: tip, onClose: { dismissTipForToday() }).frame(maxWidth: 340) }
+                    }
                     quickActions
                     profileCard
                 }
@@ -32,14 +38,22 @@ struct HomeDashboardView: View {
             let chestCount = TrainingKnowledgeService.shared.getExercises(for: "chest").count
             print("Chest research count:", chestCount)
         }
+        .task {
+            if shouldShowTip() {
+                tipText = makeDailyTip()
+                showTip = tipText != nil
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
-            Button { showChat = true } label: {
-                Image(systemName: "message.fill")
-                    .foregroundStyle(.white)
-                    .padding()
-                    .background(SAIFColors.primary)
-                    .clipShape(Circle())
-                    .shadow(radius: 4)
+            VStack(alignment: .trailing, spacing: 8) {
+                Button { showChat = true } label: {
+                    Image(systemName: "message.fill")
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(SAIFColors.primary)
+                        .clipShape(Circle())
+                        .shadow(radius: 4)
+                }
             }
             .padding(24)
         }
@@ -78,6 +92,49 @@ struct HomeDashboardView: View {
                 }
             }
         }
+    }
+}
+
+private let tipDismissKey = "coachDailyTipDismissedAt"
+
+extension HomeDashboardView {
+    private func shouldShowTip() -> Bool {
+        if let ts = UserDefaults.standard.object(forKey: tipDismissKey) as? Date {
+            let cal = Calendar.current
+            return !cal.isDateInToday(ts)
+        }
+        return true
+    }
+    private func dismissTipForToday() {
+        UserDefaults.standard.set(Date(), forKey: tipDismissKey)
+        withAnimation { showTip = false }
+    }
+}
+
+extension HomeDashboardView {
+    func makeDailyTip() -> String? {
+        guard let profile = authManager.userProfile else { return nil }
+        let goal = profile.primaryGoal
+        let level = profile.fitnessLevel
+        let freq = profile.workoutFrequency
+        let last = lastSession
+        var lines: [String] = []
+        if let last {
+            let days = Calendar.current.dateComponents([.day], from: last.startedAt, to: Date()).day ?? 0
+            if days >= 2 { lines.append("It's been \(days) days since your last session — let's build momentum today.") }
+            else if days == 0 { lines.append("Nice consistency — keep the streak going today.") }
+        }
+        switch (level, goal) {
+        case (.beginner, .bulk): lines.append("Start with key compounds and aim for 6–12 reps.")
+        case (.beginner, .maintain): lines.append("Keep intensity moderate and focus on clean technique (8–10 reps).")
+        case (.intermediate, .bulk): lines.append("Add a small progression (load or reps) on a primary lift.")
+        case (.intermediate, .cut): lines.append("Preserve strength with steady tempo and moderate volume.")
+        case (.advanced, .bulk): lines.append("Rotate intensities (heavy/moderate) to manage fatigue.")
+        default: lines.append("Prioritize quality compounds, then accessories for weak links.")
+        }
+        if freq >= 5 && lines.count < 2 { lines.append("Shorter sessions still count — keep recovery in check.") }
+        let tip = lines.prefix(2).joined(separator: " ")
+        return tip.isEmpty ? nil : tip
     }
 }
 

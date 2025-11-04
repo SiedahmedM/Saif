@@ -16,7 +16,7 @@ struct NextSuggestionsView: View {
                 if let session = workoutManager.currentSession {
                     CardView(title: "Today's Workout", subtitle: session.workoutType.capitalized) {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(suggestions(), id: \.self) { group in
+                            ForEach(Array(suggestions().enumerated()), id: \.offset) { _, group in
                                 Button(action: { selectedGroup = group; navigateToExercises = true }) {
                                     HStack {
                                         VStack(alignment: .leading) {

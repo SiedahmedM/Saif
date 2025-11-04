@@ -57,13 +57,27 @@ class WorkoutManager: ObservableObject {
         guard let profile else { error = "User profile not found"; return }
         isLoading = true; defer { isLoading = false }
         do {
+            // Reset state for a fresh session to avoid stale data from previous type
+            muscleGroupPriority = []
+            availableExercises = []
+            exerciseRecommendations = []
+            exerciseDebug = nil
+            completedGroups.removeAll()
+            completedExerciseIds.removeAll()
+            groupTargets.removeAll()
+            groupCompletedExercises.removeAll()
+
             currentSession = try await supabaseService.createWorkoutSession(userId: profile.id, workoutType: workoutType)
             let order = try await openAIService.getMuscleGroupPriority(profile: profile, workoutType: workoutType, recentWorkouts: [])
             muscleGroupPriority = sanitizePriority(for: workoutType, proposed: order)
+            muscleGroupOrderNote = buildOrderNote(for: workoutType, priority: muscleGroupPriority)
         } catch {
             self.error = error.localizedDescription
         }
-        if muscleGroupPriority.isEmpty { muscleGroupPriority = defaultPriority(for: workoutType) }
+        if muscleGroupPriority.isEmpty {
+            muscleGroupPriority = defaultPriority(for: workoutType)
+            muscleGroupOrderNote = buildOrderNote(for: workoutType, priority: muscleGroupPriority)
+        }
     }
 
     func getExerciseRecommendations(for muscleGroup: String) async {
@@ -75,10 +89,59 @@ class WorkoutManager: ObservableObject {
             availableExercises = exercises
             // Build AI ordering
             exerciseRecommendations = try await openAIService.getExerciseRecommendations(profile: profile, workoutType: session.workoutType, muscleGroup: muscleGroup, availableExercises: exercises, recentSets: [])
-            // Fallback: if AI didn't return anything, create simple recommendations from available exercises
+            // De-duplicate by exercise name to avoid SwiftUI ForEach ID collisions
+            var seen = Set<String>()
+            exerciseRecommendations = exerciseRecommendations.filter { rec in
+                if seen.contains(rec.exerciseName.lowercased()) { return false }
+                seen.insert(rec.exerciseName.lowercased())
+                return true
+            }
+            // Fallbacks if AI returned nothing
             if exerciseRecommendations.isEmpty {
-                exerciseRecommendations = exercises.prefix(5).enumerated().map { idx, ex in
-                    ExerciseRecommendation(exerciseName: ex.name, priority: idx+1, reasoning: "Available exercise")
+                let research = TrainingKnowledgeService.shared.getExercisesRanked(for: muscleGroup, goal: profile.primaryGoal)
+                if !research.isEmpty && !exercises.isEmpty {
+                    func sanitize(_ s: String) -> String {
+                        var t = s.lowercased()
+                        if let r = t.range(of: "(") { t.removeSubrange(r.lowerBound..<t.endIndex) }
+                        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                    func stripCitations(_ s: String) -> String {
+                        var t = s
+                        let patterns = [
+                            #"contentReference\[.*?\]\{.*?\}"#,
+                            #"\\[image [^\\]]*\\]"#,
+                            #"contentReference\[.*?\]"#,
+                            #"\{index=\d+\}"#
+                        ]
+                        for p in patterns {
+                            if let r = try? NSRegularExpression(pattern: p, options: [.dotMatchesLineSeparators]) {
+                                t = r.stringByReplacingMatches(in: t, options: [], range: NSRange(location: 0, length: (t as NSString).length), withTemplate: "")
+                            }
+                        }
+                        return t.replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                    var used = Set<String>()
+                    var recs: [ExerciseRecommendation] = []
+                    for rex in research {
+                        let rname = sanitize(rex.name)
+                        if let match = exercises.first(where: { ex in
+                            let aname = sanitize(ex.name)
+                            return aname.contains(rname) || rname.contains(aname)
+                        }) {
+                            if used.insert(match.name.lowercased()).inserted {
+                                let emgFirst = TextSanitizer.firstSentence(from: rex.emgActivation)
+                                let reason = "\(match.isCompound ? "Compound" : "Isolation"): \(emgFirst). Hypertrophy: \(rex.effectiveness.hypertrophy), Strength: \(rex.effectiveness.strength). Safety: \(rex.safetyLevel.rawValue)."
+                                recs.append(ExerciseRecommendation(exerciseName: match.name, priority: recs.count+1, reasoning: reason))
+                            }
+                        }
+                        if recs.count >= 5 { break }
+                    }
+                    if !recs.isEmpty { exerciseRecommendations = recs }
+                }
+                if exerciseRecommendations.isEmpty {
+                    exerciseRecommendations = exercises.prefix(5).enumerated().map { idx, ex in
+                        ExerciseRecommendation(exerciseName: ex.name, priority: idx+1, reasoning: "Available exercise")
+                    }
                 }
             }
             var allTypeCount = 0
@@ -88,7 +151,57 @@ class WorkoutManager: ObservableObject {
             }
             exerciseDebug = ExerciseDebug(requestedWorkoutType: session.workoutType, requestedGroup: muscleGroup, matchedCount: availableExercises.count, allForTypeCount: allTypeCount, error: nil)
             error = availableExercises.isEmpty ? "No exercises found for \(muscleGroup.capitalized) in \(session.workoutType.capitalized)." : nil
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            // Graceful fallback on any AI/API failure.
+            // Attempt research-based local ranking first; otherwise show available exercises.
+            let research = TrainingKnowledgeService.shared.getExercisesRanked(for: muscleGroup, goal: profile.primaryGoal)
+            if !research.isEmpty && !availableExercises.isEmpty {
+                func sanitize(_ s: String) -> String {
+                    var t = s.lowercased()
+                    if let r = t.range(of: "(") { t.removeSubrange(r.lowerBound..<t.endIndex) }
+                    return t.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                func stripCitations(_ s: String) -> String {
+                    var t = s
+                    let patterns = [
+                        #"contentReference\[.*?\]\{.*?\}"#,
+                        #"\\[image [^\\]]*\\]"#,
+                        #"contentReference\[.*?\]"#,
+                        #"\{index=\d+\}"#
+                    ]
+                    for p in patterns {
+                        if let r = try? NSRegularExpression(pattern: p, options: [.dotMatchesLineSeparators]) {
+                            t = r.stringByReplacingMatches(in: t, options: [], range: NSRange(location: 0, length: (t as NSString).length), withTemplate: "")
+                        }
+                    }
+                    return t.replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                var used = Set<String>()
+                var recs: [ExerciseRecommendation] = []
+                for rex in research {
+                    let rname = sanitize(rex.name)
+                    if let match = availableExercises.first(where: { ex in
+                        let aname = sanitize(ex.name)
+                        return aname.contains(rname) || rname.contains(aname)
+                    }) {
+                        if used.insert(match.name.lowercased()).inserted {
+                            let emgFirst = TextSanitizer.firstSentence(from: rex.emgActivation)
+                            let reason = "\(match.isCompound ? "Compound" : "Isolation"): \(emgFirst). Hypertrophy: \(rex.effectiveness.hypertrophy), Strength: \(rex.effectiveness.strength). Safety: \(rex.safetyLevel.rawValue)."
+                            recs.append(ExerciseRecommendation(exerciseName: match.name, priority: recs.count+1, reasoning: reason))
+                        }
+                    }
+                    if recs.count >= 5 { break }
+                }
+                if !recs.isEmpty { exerciseRecommendations = recs }
+            }
+            // If still empty, show first few available exercises plainly
+            if exerciseRecommendations.isEmpty && !availableExercises.isEmpty {
+                exerciseRecommendations = availableExercises.prefix(5).enumerated().map { idx, ex in
+                    ExerciseRecommendation(exerciseName: ex.name, priority: idx+1, reasoning: "Available exercise")
+                }
+            }
+            self.error = error.localizedDescription
+        }
     }
 
     // Calendar / History
@@ -142,14 +255,17 @@ class WorkoutManager: ObservableObject {
         do {
             let order = try await openAIService.getMuscleGroupPriority(profile: profile, workoutType: type, recentWorkouts: [])
             muscleGroupPriority = sanitizePriority(for: type, proposed: order)
+            muscleGroupOrderNote = buildOrderNote(for: type, priority: muscleGroupPriority)
         } catch {
             muscleGroupPriority = defaultPriority(for: type)
+            muscleGroupOrderNote = buildOrderNote(for: type, priority: muscleGroupPriority)
         }
     }
 
     // MARK: - Group planning
     @Published var groupTargets: [String:Int] = [:] // group -> number of exercises to complete
     @Published var groupCompletedExercises: [String:Int] = [:] // group -> completed exercise count
+    @Published var muscleGroupOrderNote: String? = nil
 
     func setTarget(for group: String, count: Int) {
         let key = group.lowercased()
@@ -194,6 +310,17 @@ class WorkoutManager: ObservableObject {
             try await supabaseService.completeWorkoutSession(sessionId: session.id, notes: notes)
             currentSession = nil
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+extension WorkoutManager {
+    func buildOrderNote(for workoutType: String, priority: [String]) -> String {
+        let normalized = priority.map { $0.replacingOccurrences(of: "_", with: " ") }
+        let orderText = normalized.prefix(3).map { $0.capitalized }.joined(separator: " → ")
+        let principles = TrainingKnowledgeService.shared.getOrderingPrinciples()
+        let raw = principles?.optimalSequence.components(separatedBy: ".").first ?? "Compound lifts first, then accessories"
+        let guidance = TextSanitizer.sanitizedResearchText(raw)
+        return "Recommended order: \(orderText). Rationale: \(guidance)."
     }
 }
 

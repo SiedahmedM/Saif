@@ -7,10 +7,15 @@ struct ExerciseSelectionKnowledge: Codable {
     let shoulders: MuscleGroupExercises
     let quads: MuscleGroupExercises
     let hamstrings: MuscleGroupExercises?
+    let glutes: MuscleGroupExercises?
+    let biceps: MuscleGroupExercises?
+    let triceps: MuscleGroupExercises?
+    let calves: MuscleGroupExercises?
+    let core: MuscleGroupExercises?
     let exerciseOrderingResearch: ExerciseOrderingResearch
 
     enum CodingKeys: String, CodingKey {
-        case chest, back, shoulders, quads, hamstrings
+        case chest, back, shoulders, quads, hamstrings, glutes, biceps, triceps, calves, core
         case exerciseOrderingResearch = "exercise_ordering_research"
     }
 }

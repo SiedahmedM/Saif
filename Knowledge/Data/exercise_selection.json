@@ -505,5 +505,314 @@
         "notes": "Explosive hip hinges on back extension bench"
       }
     ]
+  },
+  "glutes": {
+    "top_compound_exercises": [
+      {
+        "name": "Barbell Back Squat",
+        "EMG_activation": "High glute activation, especially deep hip flexion.",
+        "effectiveness": {
+          "hypertrophy": "Excellent for glute hypertrophy via heavy load + stretch.",
+          "strength": "Foundational strength builder with progressive overload.",
+          "power": "Indirect power carryover via strength; can train explosively."
+        },
+        "injury_risk": "Medium – requires solid squat form and mobility.",
+        "equipment": "Barbell and rack (or goblet variant).",
+        "prerequisites": "Ankle/hip mobility and core bracing proficiency.",
+        "progression_path": "Progress from goblet/box squats to loaded back squats."
+      },
+      {
+        "name": "Barbell Hip Thrust",
+        "EMG_activation": "Very high glute activation at lockout.",
+        "effectiveness": {
+          "hypertrophy": "Highly effective; emphasizes shortened glute position with tension.",
+          "strength": "Boosts hip extension strength and deadlift lockout.",
+          "power": "Horizontal force vector can aid acceleration power."
+        },
+        "injury_risk": "Low/Medium – avoid lumbar hyperextension; pad the bar.",
+        "equipment": "Barbell, bench (shoulders elevated), pad/band optional.",
+        "prerequisites": "Glute bridge mastery and core control.",
+        "progression_path": "From bodyweight bridges → light thrusts → heavier and single‑leg.",
+        "when_to_prioritize": "When heavy spinal loading is not desired"
+      },
+      {
+        "name": "Romanian Deadlift (RDL)",
+        "EMG_activation": "High glute + hamstring activation through hinge.",
+        "effectiveness": {
+          "hypertrophy": "Strong hypertrophy at long muscle lengths (deep stretch).",
+          "strength": "Excellent posterior‑chain strength builder.",
+          "power": "Primarily strength; indirect power support."
+        },
+        "injury_risk": "Medium – maintain neutral spine; hinge mechanics essential.",
+        "equipment": "Barbell or dumbbells.",
+        "prerequisites": "Hinge pattern proficiency; hamstring mobility.",
+        "progression_path": "Light RDLs → heavier RDLs or full deadlift variants."
+      }
+    ],
+    "top_accessory_exercises": [
+      {
+        "name": "Bulgarian Split Squat",
+        "EMG_activation": "High glute activation; unilateral stance challenges stabilizers.",
+        "effectiveness": {
+          "hypertrophy": "Excellent unilateral hypertrophy and deep stretch stimulus.",
+          "strength": "Builds single‑leg strength; addresses imbalances.",
+          "power": "Indirect power via unilateral strength base."
+        },
+        "injury_risk": "Low/Medium – balance/form control needed.",
+        "equipment": "Bench/step; dumbbells or barbell.",
+        "prerequisites": "Basic lunge strength and balance.",
+        "progression_path": "Bodyweight split squats → load → ROM/tempo progressions."
+      },
+      {
+        "name": "45° Back Extension",
+        "EMG_activation": "Very high glute activation with hinge focus.",
+        "effectiveness": {
+          "hypertrophy": "Highly effective isolation/higher‑rep hypertrophy.",
+          "strength": "Strengthens erectors + glutes; postural benefits.",
+          "power": "Not for power; controlled tempo."
+        },
+        "injury_risk": "Low – avoid excessive hyperextension; control reps.",
+        "equipment": "45° hyperextension bench; bodyweight/plate/band.",
+        "prerequisites": "Foundational core control.",
+        "progression_path": "Increase load or range; pause/tempo variants."
+      }
+    ],
+    "exercise_substitutions": []
+  },
+  "biceps": {
+    "top_compound_exercises": [
+      {
+        "name": "Weighted Chin‑Up",
+        "EMG_activation": "Very high biceps activation; underhand grip biases elbow flexors.",
+        "effectiveness": {
+          "hypertrophy": "Excellent compound stimulus; add isolation after for max growth.",
+          "strength": "Develops strong pulling strength across arms/back.",
+          "power": "Indirect power via strength; explosive variants possible."
+        },
+        "injury_risk": "Medium – manage elbow/shoulder stress; avoid swinging.",
+        "equipment": "Pull‑up bar; dip belt/bands for load/regressions.",
+        "prerequisites": "Assisted/negative chin‑ups baseline.",
+        "progression_path": "Eccentrics/band assist → bodyweight → weighted."
+      },
+      {
+        "name": "Barbell Curl",
+        "EMG_activation": "High biceps activation; heavy bilateral loading.",
+        "effectiveness": {
+          "hypertrophy": "Time‑tested mass builder via high mechanical tension.",
+          "strength": "Builds elbow flexor strength supporting pulls.",
+          "power": "Not power‑focused; slow/controlled preferred."
+        },
+        "injury_risk": "Low/Medium – avoid momentum; consider EZ‑bar for wrists.",
+        "equipment": "Barbell/EZ‑bar and plates (or bands).",
+        "prerequisites": "Basic curl technique.",
+        "progression_path": "Small load increases; use strict form before intensifiers."
+      }
+    ],
+    "top_accessory_exercises": [
+      {
+        "name": "Incline Dumbbell Curl",
+        "EMG_activation": "High long‑head activation from stretched position.",
+        "effectiveness": {
+          "hypertrophy": "Excellent for long‑head hypertrophy at long lengths.",
+          "strength": "Assists biceps strength with strict control.",
+          "power": "Not power‑oriented."
+        },
+        "injury_risk": "Low – monitor anterior shoulder; use manageable loads.",
+        "equipment": "Adjustable bench (45–60°) and dumbbells.",
+        "prerequisites": "Basic curl mastery; shoulder comfort.",
+        "progression_path": "Progress reps then load; strict tempo."
+      },
+      {
+        "name": "Concentration Curl",
+        "EMG_activation": "Very high isolated biceps activation (near top of EMG studies).",
+        "effectiveness": {
+          "hypertrophy": "Superb isolation; high metabolic stress and fiber recruitment.",
+          "strength": "Builds localized strength/endurance; mind‑muscle connection.",
+          "power": "Not for power."
+        },
+        "injury_risk": "Low – very joint‑friendly with proper load.",
+        "equipment": "Dumbbell and bench/chair.",
+        "prerequisites": "None beyond basic curling.",
+        "progression_path": "Increase reps then weight; strict form."
+      }
+    ],
+    "exercise_substitutions": []
+  },
+  "triceps": {
+    "top_compound_exercises": [
+      {
+        "name": "Parallel Bar Dip",
+        "EMG_activation": "High triceps activation; top tier in EMG.",
+        "effectiveness": {
+          "hypertrophy": "Excellent multi‑joint triceps hypertrophy via bodyweight/load.",
+          "strength": "Builds pressing strength (lockout) and overall upper body.",
+          "power": "Not typical power; indirect benefits via strength."
+        },
+        "injury_risk": "Medium – control depth; shoulder‑friendly setup.",
+        "equipment": "Dip bars/station; belt for load.",
+        "prerequisites": "Baseline pressing strength; assisted dips if needed.",
+        "progression_path": "Bench/assisted dips → bodyweight → weighted."
+      },
+      {
+        "name": "Close‑Grip Bench Press",
+        "EMG_activation": "Moderate triceps activation; high absolute loading.",
+        "effectiveness": {
+          "hypertrophy": "Very effective for triceps mass (especially lockout range).",
+          "strength": "Excellent triceps strength; strong carryover to bench.",
+          "power": "Useful for dynamic effort variants; mainly strength/hypertrophy."
+        },
+        "injury_risk": "Medium – watch wrists/elbows; elbows tucked ~45°.",
+        "equipment": "Barbell and bench (or dumbbells).",
+        "prerequisites": "Regular bench proficiency.",
+        "progression_path": "Narrow within shoulder‑width; progressive overload."
+      }
+    ],
+    "top_accessory_exercises": [
+      {
+        "name": "Cable Triceps Pushdown",
+        "EMG_activation": "Moderate‑high activation of lateral/medial heads.",
+        "effectiveness": {
+          "hypertrophy": "Very effective isolation finisher; constant cable tension.",
+          "strength": "Builds endurance and some lockout support.",
+          "power": "Not for power."
+        },
+        "injury_risk": "Low – joint‑friendly with rope; avoid shrugging.",
+        "equipment": "Cable high‑pulley (rope/bar) or band.",
+        "prerequisites": "None; learn to keep elbows pinned.",
+        "progression_path": "Increase reps/sets; slow eccentrics."
+      },
+      {
+        "name": "Overhead Triceps Extension",
+        "EMG_activation": "Targets long head due to overhead stretch.",
+        "effectiveness": {
+          "hypertrophy": "Crucial for long‑head hypertrophy via stretch stimulus.",
+          "strength": "Builds full‑ROM triceps strength; supports overhead lockouts.",
+          "power": "Not power‑focused."
+        },
+        "injury_risk": "Medium – manage shoulder/elbow stress; strict tempo.",
+        "equipment": "Dumbbell/EZ‑bar; seated or standing.",
+        "prerequisites": "Comfortable overhead mobility.",
+        "progression_path": "Light loads → controlled ROM → progressive load."
+      }
+    ],
+    "exercise_substitutions": []
+  },
+  "calves": {
+    "top_compound_exercises": [
+      {
+        "name": "Standing Calf Raise",
+        "EMG_activation": "High gastrocnemius activation with knee extended.",
+        "effectiveness": {
+          "hypertrophy": "Top choice for gastroc hypertrophy; emphasize deep stretch.",
+          "strength": "Improves plantarflexion strength for daily/sport tasks.",
+          "power": "Indirect power via strong calves; plyos separate."
+        },
+        "injury_risk": "Medium – avoid bouncing; protect Achilles.",
+        "equipment": "Standing calf machine/Smith; step + dumbbells minimal.",
+        "prerequisites": "Basic balance; start bodyweight.",
+        "progression_path": "Flat → step ROM → weighted; pause at stretch."
+      },
+      {
+        "name": "Seated Calf Raise",
+        "EMG_activation": "Biases soleus due to bent knee.",
+        "effectiveness": {
+          "hypertrophy": "Effective soleus hypertrophy; complements standing raises.",
+          "strength": "Builds endurance/strength in soleus; ankle stability.",
+          "power": "Minimal direct power."
+        },
+        "injury_risk": "Low – stable and joint‑friendly.",
+        "equipment": "Seated calf machine or dumbbell on knee + block.",
+        "prerequisites": "None; ease into deep ROM.",
+        "progression_path": "High‑rep focus; progress load gradually."
+      }
+    ],
+    "top_accessory_exercises": [
+      {
+        "name": "Single‑Leg Calf Raise",
+        "EMG_activation": "High relative activation per limb; strong stabilizer demand.",
+        "effectiveness": {
+          "hypertrophy": "Great for symmetry; induces significant metabolic stress.",
+          "strength": "Builds unilateral strength and balance.",
+          "power": "Helps single‑leg power base indirectly."
+        },
+        "injury_risk": "Low – use support; control descent.",
+        "equipment": "Step/block; optional dumbbell.",
+        "prerequisites": "Two‑leg raises baseline.",
+        "progression_path": "Two‑leg to one‑leg; add load; vary reps."
+      },
+      {
+        "name": "Calf Press (Leg Press)",
+        "EMG_activation": "Similar activation to standing raises; heavy safe loading.",
+        "effectiveness": {
+          "hypertrophy": "Enables high tension + volume safely; great finisher.",
+          "strength": "Increases absolute plantarflexion strength.",
+          "power": "Not a power drill; careful lockout."
+        },
+        "injury_risk": "Low – ensure foot grip; slight knee bend.",
+        "equipment": "45° or horizontal leg press.",
+        "prerequisites": "None beyond machine setup.",
+        "progression_path": "Progress load/reps; drop sets possible."
+      }
+    ],
+    "exercise_substitutions": []
+  },
+  "core": {
+    "top_compound_exercises": [
+      {
+        "name": "Hanging Leg Raise",
+        "EMG_activation": "Top activator of rectus abdominis/obliques when controlled.",
+        "effectiveness": {
+          "hypertrophy": "Excellent for lower‑ab focus; progressive with ROM/load.",
+          "strength": "Builds strong hip‑flexor/ab complex; grip/shoulders too.",
+          "power": "Not power‑centric; control momentum."
+        },
+        "injury_risk": "Medium – avoid swinging; manage lumbar arch.",
+        "equipment": "Pull‑up bar or captain's chair; straps optional.",
+        "prerequisites": "Baseline knee raises or floor leg raise.",
+        "progression_path": "Bent‑knee → straight‑leg → toes‑to‑bar; add load later."
+      },
+      {
+        "name": "Ab Wheel Rollout",
+        "EMG_activation": "Extremely high anti‑extension core activation.",
+        "effectiveness": {
+          "hypertrophy": "Excellent hypertrophy/strength via long ROM under tension.",
+          "strength": "Develops tremendous anti‑extension core strength.",
+          "power": "Not power‑oriented; slow controlled."
+        },
+        "injury_risk": "Medium – avoid lumbar sag; progress range patiently.",
+        "equipment": "Ab wheel or barbell with plates; mat.",
+        "prerequisites": "Solid plank, shoulder comfort.",
+        "progression_path": "Partial kneeling → full kneeling → standing (wall incline)."
+      }
+    ],
+    "top_accessory_exercises": [
+      {
+        "name": "Cable Woodchop",
+        "EMG_activation": "High oblique + RA activation through rotation.",
+        "effectiveness": {
+          "hypertrophy": "Great for obliques/core definition under constant tension.",
+          "strength": "Builds rotational strength/stability for sport.",
+          "power": "Can train power with lighter explosive chops."
+        },
+        "injury_risk": "Low/Medium – pivot hips; avoid lumbar torque.",
+        "equipment": "Cable at high/low anchor; band alternative.",
+        "prerequisites": "None; learn pivoting mechanics.",
+        "progression_path": "Increase range/resistance; both sides evenly."
+      },
+      {
+        "name": "Side Plank with Hip Dip",
+        "EMG_activation": "Very high lateral core activation; McGill‑endorsed family.",
+        "effectiveness": {
+          "hypertrophy": "Builds lateral core endurance/definition; some hypertrophy.",
+          "strength": "Excellent for lateral stability and spinal support.",
+          "power": "Not for power; control tempo."
+        },
+        "injury_risk": "Low – elbow under shoulder; modest ROM.",
+        "equipment": "Mat only; optional hip weight.",
+        "prerequisites": "Ability to hold side plank.",
+        "progression_path": "Increase time/reps; add load/elevation."
+      }
+    ],
+    "exercise_substitutions": []
   }
 }

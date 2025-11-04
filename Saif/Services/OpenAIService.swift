@@ -128,6 +128,7 @@ class OpenAIService {
 
     private func callGPT4(systemPrompt: String, userPrompt: String) async throws -> String {
         guard let url = URL(string: baseURL) else { throw OpenAIError.invalidURL }
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw OpenAIError.missingAPIKey }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -145,16 +146,32 @@ class OpenAIService {
         ]
 
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+#if DEBUG
+        print("OpenAI: sending request to chat/completions (model=gpt-4o-mini), userPrompt chars: \(userPrompt.count)")
+#endif
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        let session = URLSession(configuration: config)
+        let start = Date()
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { throw OpenAIError.invalidResponse }
-        guard httpResponse.statusCode == 200 else { throw OpenAIError.apiError(statusCode: httpResponse.statusCode) }
+        guard httpResponse.statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? "<no body>"
+            print("OpenAI API error (status \(httpResponse.statusCode)): \(body)")
+            throw OpenAIError.apiError(statusCode: httpResponse.statusCode, body: body)
+        }
 
         let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let choices = jsonResponse?["choices"] as? [[String: Any]],
               let firstChoice = choices.first,
               let message = firstChoice["message"] as? [String: Any],
               let content = message["content"] as? String else { throw OpenAIError.invalidResponse }
+#if DEBUG
+        let ms = Int(Date().timeIntervalSince(start) * 1000)
+        print("OpenAI: 200 OK (\(ms)ms). Content chars: \(content.count)")
+#endif
         return content
     }
 
@@ -234,7 +251,7 @@ class OpenAIService {
 
         var researchContext = ""
         if let research = researchData {
-            let progressionSnippet = research.progressionPath
+            let progressionSnippet = TextSanitizer.sanitizedResearchText(research.progressionPath)
                 .components(separatedBy: ". ")
                 .prefix(3)
                 .joined(separator: ". ")
@@ -295,9 +312,10 @@ class OpenAIService {
         // Format top research exercises with key data
         let researchContext = researchExercises.prefix(5).map { ex in
             let safetyEmoji = ex.safetyLevel == .low ? "✅" : ex.safetyLevel == .medium ? "⚠️" : "⚠️⚠️"
+            let activation = TextSanitizer.firstSentence(from: ex.emgActivation)
             return """
             • \(ex.name) \(safetyEmoji):
-              - Activation: \(ex.emgActivation.components(separatedBy: ".").first ?? "High muscle activation")
+              - Activation: \(activation)
               - Hypertrophy: \(ex.effectiveness.hypertrophy)
               - Strength: \(ex.effectiveness.strength)
               - Safety: \(ex.injuryRisk)
@@ -311,7 +329,9 @@ class OpenAIService {
         }.joined(separator: "\n")
 
         // Exercise ordering guidance
-        let orderingGuidance = orderingPrinciples?.optimalSequence.components(separatedBy: ".").prefix(2).joined(separator: ". ") ?? "Prioritize compound exercises first, then isolation."
+        let orderingGuidance = orderingPrinciples
+            .map { TextSanitizer.sanitizedResearchText($0.optimalSequence).components(separatedBy: ".").prefix(2).joined(separator: ". ") }
+            ?? "Prioritize compound exercises first, then isolation."
 
         let goalContext = profile.primaryGoal == .bulk ? "maximize hypertrophy" :
                           profile.primaryGoal == .cut ? "maintain muscle while managing fatigue" :
@@ -483,4 +503,20 @@ struct SetRepRecommendation: Codable { let sets: Int; let reps: Int; let weight:
 struct MuscleGroupPriorityResponse: Codable { let priorityOrder: [String] }
 
 // MARK: - Errors
-enum OpenAIError: Error { case invalidURL, invalidResponse, apiError(statusCode: Int), parseError }
+enum OpenAIError: Error, LocalizedError {
+    case invalidURL
+    case invalidResponse
+    case apiError(statusCode: Int, body: String)
+    case parseError
+    case missingAPIKey
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL: return "OpenAI: Invalid URL"
+        case .invalidResponse: return "OpenAI: Invalid response"
+        case let .apiError(code, body): return "OpenAI: API error (\(code)) — \(body)"
+        case .parseError: return "OpenAI: Failed to parse JSON content"
+        case .missingAPIKey: return "OpenAI: API key is missing"
+        }
+    }
+}

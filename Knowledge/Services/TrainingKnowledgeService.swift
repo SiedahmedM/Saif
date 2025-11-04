@@ -86,7 +86,7 @@ final class TrainingKnowledgeService {
             compoundVsIsolationTiming: "Isolation after compounds for focused fatigue"
         )
 
-        return ExerciseSelectionKnowledge(chest: chest, back: back, shoulders: shoulders, quads: quads, hamstrings: nil, exerciseOrderingResearch: ordering)
+        return ExerciseSelectionKnowledge(chest: chest, back: back, shoulders: shoulders, quads: quads, hamstrings: nil, glutes: nil, biceps: nil, triceps: nil, calves: nil, core: nil, exerciseOrderingResearch: ordering)
     }
 
     // Testing/debug helper
@@ -126,6 +126,11 @@ final class TrainingKnowledgeService {
         guard let k = queue.sync(execute: { knowledge }) else { return nil }
         var groups = [k.chest, k.back, k.shoulders, k.quads]
         if let h = k.hamstrings { groups.append(h) }
+        if let g1 = k.glutes { groups.append(g1) }
+        if let g2 = k.biceps { groups.append(g2) }
+        if let g3 = k.triceps { groups.append(g3) }
+        if let g4 = k.calves { groups.append(g4) }
+        if let g5 = k.core { groups.append(g5) }
         for g in groups {
             if let ex = (g.topCompoundExercises + g.topAccessoryExercises).first(where: { $0.name.lowercased().contains(name.lowercased()) }) {
                 return ex
@@ -142,6 +147,11 @@ final class TrainingKnowledgeService {
         case "shoulders", "delts": return k.shoulders
         case "quads", "legs": return k.quads
         case "hamstrings", "hams", "posterior chain": return k.hamstrings
+        case "glutes", "butt": return k.glutes
+        case "biceps", "bis", "arms-biceps": return k.biceps
+        case "triceps", "tris", "arms-triceps": return k.triceps
+        case "calves", "calf": return k.calves
+        case "abs", "core", "abs/core", "abdominals": return k.core
         default: return nil
         }
     }
@@ -154,6 +164,11 @@ final class TrainingKnowledgeService {
         case "shoulders", "delts", "deltoids": return "shoulders"
         case "quads", "legs", "quadriceps", "thighs": return "quads"
         case "hamstrings", "hams", "posterior chain", "hamstring": return "hamstrings"
+        case "glutes", "butt", "glute": return "glutes"
+        case "biceps", "bis": return "biceps"
+        case "triceps", "tris": return "triceps"
+        case "calves", "calf": return "calves"
+        case "abs", "core", "abs/core", "abdominals": return "core"
         default: return g
         }
     }

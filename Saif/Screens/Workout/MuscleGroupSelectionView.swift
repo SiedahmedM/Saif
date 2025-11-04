@@ -5,6 +5,7 @@ struct MuscleGroupSelectionView: View {
     @State private var selected: String?
     @State private var goNext = false
     @State private var goSummary = false
+    @State private var showOrderNote = true
 
     var body: some View {
         ZStack {
@@ -27,6 +28,21 @@ struct MuscleGroupSelectionView: View {
                             }
                         }
                     } else {
+                        if let note = workoutManager.muscleGroupOrderNote, showOrderNote {
+                            ZStack(alignment: .topTrailing) {
+                                CardView {
+                                    HStack(alignment: .top, spacing: 12) {
+                                        Image(systemName: "info.circle.fill").foregroundStyle(SAIFColors.primary)
+                                        Text(note).foregroundStyle(SAIFColors.mutedText)
+                                        Spacer(minLength: 0)
+                                    }
+                                }
+                                Button(action: { withAnimation { showOrderNote = false } }) {
+                                    Image(systemName: "xmark.circle.fill").foregroundStyle(SAIFColors.mutedText)
+                                }
+                                .padding(8)
+                            }
+                        }
                         CardView(title: "Recommended Order") {
                             HStack(spacing: 8) {
                                 ForEach(Array(workoutManager.muscleGroupPriority.enumerated()), id: \.offset) { idx, g in
@@ -60,7 +76,16 @@ struct MuscleGroupSelectionView: View {
         }
         .navigationTitle("SAIF")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { Button("End") { goSummary = true } }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: { withAnimation { showOrderNote = true } }) {
+                    Image(systemName: "info.circle")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("End") { goSummary = true }
+            }
+        }
         .background(
             NavigationLink(isActive: $goSummary) { WorkoutSummaryView() } label: { EmptyView() }
         )
