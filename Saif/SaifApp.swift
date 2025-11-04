@@ -13,12 +13,15 @@ struct SaifApp: App {
     @StateObject private var workoutManager = WorkoutManager()
 
     init() {
-        // Touch the knowledge service to ensure it compiles and links
-        print("TrainingKnowledgeService available: \(TrainingKnowledgeService.shared)")
+        print("🟢 App init started")
+        // Debug: temporarily avoid touching singletons here to isolate startup issues
+        // print("TrainingKnowledgeService available: \(TrainingKnowledgeService.shared)")
+        print("🟢 App init completed")
     }
 
     var body: some Scene {
-        WindowGroup {
+        print("🟢 Body evaluated")
+        return WindowGroup {
             NavigationStack { AuthFlowView() }
                 .environmentObject(authManager)
                 .environmentObject(workoutManager)
