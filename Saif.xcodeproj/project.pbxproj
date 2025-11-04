@@ -7,11 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		BC6F79CE2EB9A06A00304706 /* exercise_selection.json in Resources */ = {isa = PBXBuildFile; fileRef = BC6F79C72EB9A06A00304706 /* exercise_selection.json */; };
-		BC6F79CF2EB9A06A00304706 /* TrainingKnowledgeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6F79CB2EB9A06A00304706 /* TrainingKnowledgeService.swift */; };
-		BC6F79D02EB9A06A00304706 /* ExerciseSelectionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6F79C92EB9A06A00304706 /* ExerciseSelectionModels.swift */; };
-		D0K0WLED0001 /* Knowledge (Folder) in Resources */ = {isa = PBXBuildFile; fileRef = D0K0WLEF0001 /* Knowledge */; };
 		D0C0FF021234567890ABCDEF /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = D0C0FF011234567890ABCDEF /* Supabase */; };
+		D0K0WLED0001 /* Knowledge in Resources */ = {isa = PBXBuildFile; fileRef = D0K0WLEF0001 /* Knowledge */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,10 +32,7 @@
 		BC6F78DB2EB6A64300304706 /* Saif.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Saif.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC6F78EB2EB6A64400304706 /* SaifTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaifTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC6F78F52EB6A64400304706 /* SaifUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaifUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		BC6F79C72EB9A06A00304706 /* exercise_selection.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = exercise_selection.json; sourceTree = "<group>"; };
-		BC6F79C92EB9A06A00304706 /* ExerciseSelectionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseSelectionModels.swift; sourceTree = "<group>"; };
-		BC6F79CB2EB9A06A00304706 /* TrainingKnowledgeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingKnowledgeService.swift; sourceTree = "<group>"; };
-		D0K0WLEF0001 /* Knowledge */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Knowledge; sourceTree = SOURCE_ROOT; };
+		D0K0WLEF0001 /* Knowledge */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Saif/Knowledge; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -89,7 +83,6 @@
 			isa = PBXGroup;
 			children = (
 				D0K0WLEF0001 /* Knowledge */,
-				BC6F79CD2EB9A06A00304706 /* Knowledge */,
 				BC6F78DD2EB6A64300304706 /* Saif */,
 				BC6F78EE2EB6A64400304706 /* SaifTests */,
 				BC6F78F82EB6A64400304706 /* SaifUITests */,
@@ -105,40 +98,6 @@
 				BC6F78F52EB6A64400304706 /* SaifUITests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		BC6F79C82EB9A06A00304706 /* Data */ = {
-			isa = PBXGroup;
-			children = (
-				BC6F79C72EB9A06A00304706 /* exercise_selection.json */,
-			);
-			path = Data;
-			sourceTree = "<group>";
-		};
-		BC6F79CA2EB9A06A00304706 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				BC6F79C92EB9A06A00304706 /* ExerciseSelectionModels.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
-		BC6F79CC2EB9A06A00304706 /* Services */ = {
-			isa = PBXGroup;
-			children = (
-				BC6F79CB2EB9A06A00304706 /* TrainingKnowledgeService.swift */,
-			);
-			path = Services;
-			sourceTree = "<group>";
-		};
-		BC6F79CD2EB9A06A00304706 /* Knowledge */ = {
-			isa = PBXGroup;
-			children = (
-				BC6F79C82EB9A06A00304706 /* Data */,
-				BC6F79CA2EB9A06A00304706 /* Models */,
-				BC6F79CC2EB9A06A00304706 /* Services */,
-			);
-			path = Knowledge;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -265,8 +224,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D0K0WLED0001 /* Knowledge (Folder) in Resources */,
-				BC6F79CE2EB9A06A00304706 /* exercise_selection.json in Resources */,
+				D0K0WLED0001 /* Knowledge in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -291,8 +249,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BC6F79CF2EB9A06A00304706 /* TrainingKnowledgeService.swift in Sources */,
-				BC6F79D02EB9A06A00304706 /* ExerciseSelectionModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
