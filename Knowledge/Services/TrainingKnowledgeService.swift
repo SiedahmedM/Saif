@@ -14,29 +14,35 @@ final class TrainingKnowledgeService {
 
     // MARK: - Loading
     private func loadKnowledge() {
+        var loadedPrimary = false
         // Try bundled JSON first
         if let url = Bundle.main.url(forResource: "exercise_selection", withExtension: "json", subdirectory: "Knowledge/Data"),
            let data = try? Data(contentsOf: url) {
             do {
                 let decoder = JSONDecoder()
                 let parsed = try decoder.decode(ExerciseSelectionKnowledge.self, from: data)
-                queue.async(flags: .barrier) { self.knowledge = parsed }
+                queue.async(flags: .barrier) {
+                    self.knowledge = parsed
+                    self.usedFallback = false
+                }
+                loadedPrimary = true
                 print("✅ TrainingKnowledgeService: Loaded exercise selection knowledge")
             } catch {
-                print("⚠️ TrainingKnowledgeService: JSON invalid, using fallback dataset")
-                // Fall through to fallback data
+                print("⚠️ TrainingKnowledgeService: JSON invalid; will use fallback dataset")
             }
         } else {
-            print("⚠️ TrainingKnowledgeService: Failed to locate exercise_selection.json in bundle")
+            print("⚠️ TrainingKnowledgeService: Failed to locate exercise_selection.json in bundle; will use fallback dataset")
         }
 
-        // Fallback to a minimal, valid in-memory dataset to keep the app functional
-        let fallback = self.defaultKnowledge()
-        queue.async(flags: .barrier) {
-            self.knowledge = fallback
-            self.usedFallback = true
+        // Fallback to a minimal, valid in-memory dataset only if primary load failed
+        if !loadedPrimary {
+            let fallback = self.defaultKnowledge()
+            queue.async(flags: .barrier) {
+                self.knowledge = fallback
+                self.usedFallback = true
+            }
+            print("⚠️ TrainingKnowledgeService: Using fallback exercise selection dataset")
         }
-        print("✅ TrainingKnowledgeService: Loaded exercise selection knowledge")
 
         // Load volume guidelines if available
         if let volumeURL = Bundle.main.url(forResource: "volume_guidelines", withExtension: "json", subdirectory: "Knowledge/Data"),
