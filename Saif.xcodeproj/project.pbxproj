@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1B2C3D4E5F6010000000001 /* Knowledge/Services/TrainingKnowledgeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6010000000002 /* Knowledge/Services/TrainingKnowledgeService.swift */; };
+		A1B2C3D4E5F6010000000003 /* Knowledge/Models/ExerciseSelectionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6010000000004 /* Knowledge/Models/ExerciseSelectionModels.swift */; };
 		D0C0FF021234567890ABCDEF /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = D0C0FF011234567890ABCDEF /* Supabase */; };
 		D0K0WLED0001 /* Knowledge in Resources */ = {isa = PBXBuildFile; fileRef = D0K0WLEF0001 /* Knowledge */; };
 /* End PBXBuildFile section */
@@ -29,6 +31,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A1B2C3D4E5F6010000000002 /* Knowledge/Services/TrainingKnowledgeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Knowledge/Services/TrainingKnowledgeService.swift; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F6010000000004 /* Knowledge/Models/ExerciseSelectionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Knowledge/Models/ExerciseSelectionModels.swift; sourceTree = SOURCE_ROOT; };
 		BC6F78DB2EB6A64300304706 /* Saif.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Saif.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC6F78EB2EB6A64400304706 /* SaifTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaifTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC6F78F52EB6A64400304706 /* SaifUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaifUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -87,6 +91,7 @@
 				BC6F78EE2EB6A64400304706 /* SaifTests */,
 				BC6F78F82EB6A64400304706 /* SaifUITests */,
 				BC6F78DC2EB6A64300304706 /* Products */,
+				BC6F7B052EB9C96300304706 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -98,6 +103,15 @@
 				BC6F78F52EB6A64400304706 /* SaifUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BC6F7B052EB9C96300304706 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6010000000002 /* Knowledge/Services/TrainingKnowledgeService.swift */,
+				A1B2C3D4E5F6010000000004 /* Knowledge/Models/ExerciseSelectionModels.swift */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -249,6 +263,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F6010000000001 /* Knowledge/Services/TrainingKnowledgeService.swift in Sources */,
+				A1B2C3D4E5F6010000000003 /* Knowledge/Models/ExerciseSelectionModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

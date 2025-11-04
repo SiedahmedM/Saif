@@ -34,16 +34,44 @@ class OpenAIService {
         availableExercises: [Exercise],
         recentSets: [ExerciseSet]
     ) async throws -> [ExerciseRecommendation] {
-        let prompt = buildExerciseRecommendationPrompt(
-            profile: profile,
-            workoutType: workoutType,
-            muscleGroup: muscleGroup,
-            availableExercises: availableExercises,
-            recentSets: recentSets
+        // Query research knowledge; gracefully fallback if unavailable
+        let researchExercises = TrainingKnowledgeService.shared.getExercisesRanked(
+            for: muscleGroup,
+            goal: profile.primaryGoal
         )
+        let equipmentFiltered = TrainingKnowledgeService.shared.getExercises(
+            for: muscleGroup,
+            availableEquipment: profile.gymType
+        )
+        let orderingPrinciples = TrainingKnowledgeService.shared.getOrderingPrinciples()
+
+        let useEnhanced = !researchExercises.isEmpty || !equipmentFiltered.isEmpty || orderingPrinciples != nil
+
+        let prompt: String
+        if useEnhanced {
+            prompt = buildEnhancedExercisePrompt(
+                profile: profile,
+                workoutType: workoutType,
+                muscleGroup: muscleGroup,
+                availableExercises: availableExercises,
+                researchExercises: researchExercises,
+                equipmentFiltered: equipmentFiltered,
+                orderingPrinciples: orderingPrinciples,
+                recentSets: recentSets
+            )
+        } else {
+            // Fallback to existing simpler prompt
+            prompt = buildExerciseRecommendationPrompt(
+                profile: profile,
+                workoutType: workoutType,
+                muscleGroup: muscleGroup,
+                availableExercises: availableExercises,
+                recentSets: recentSets
+            )
+        }
 
         let response = try await callGPT4(
-            systemPrompt: "You are an expert strength coach. Recommend exercises based on the user's profile, goals, and workout history. Return recommendations as JSON.",
+            systemPrompt: "You are an expert strength coach with deep knowledge of exercise science. Recommend exercises based on evidence (EMG data, effectiveness research) and user context. Return JSON.",
             userPrompt: prompt
         )
 
@@ -57,14 +85,18 @@ class OpenAIService {
         exercise: Exercise,
         previousSets: [ExerciseSet]
     ) async throws -> SetRepRecommendation {
+        // Lookup research for this specific exercise, if available
+        let researchData = TrainingKnowledgeService.shared.findExercise(named: exercise.name)
+
         let prompt = buildSetRepPrompt(
             profile: profile,
             exercise: exercise,
-            previousSets: previousSets
+            previousSets: previousSets,
+            researchData: researchData
         )
 
         let response = try await callGPT4(
-            systemPrompt: "You are a strength and conditioning coach. Recommend sets, reps, and weight based on progressive overload principles. Return as JSON.",
+            systemPrompt: "You are a strength and conditioning coach. Recommend sets, reps, and weight based on progressive overload principles and evidence-based training. Return JSON.",
             userPrompt: prompt
         )
 
@@ -195,18 +227,49 @@ class OpenAIService {
     private func buildSetRepPrompt(
         profile: UserProfile,
         exercise: Exercise,
-        previousSets: [ExerciseSet]
+        previousSets: [ExerciseSet],
+        researchData: ExerciseDetail?
     ) -> String {
-        let lastPerformance = previousSets.last.map { "\($0.setNumber) sets of \($0.reps) reps at \($0.weight)lbs" } ?? "No previous data"
+        let lastPerformance = previousSets.last.map { "\($0.setNumber) sets of \($0.reps) reps at \(Int($0.weight))lbs" } ?? "No previous data"
+
+        var researchContext = ""
+        if let research = researchData {
+            let progressionSnippet = research.progressionPath
+                .components(separatedBy: ". ")
+                .prefix(3)
+                .joined(separator: ". ")
+            researchContext = """
+
+            RESEARCH DATA FOR \(exercise.name):
+            - Effectiveness: Hypertrophy (\(research.effectiveness.hypertrophy)), Strength (\(research.effectiveness.strength))
+            - Safety Level: \(research.safetyLevel.rawValue)
+            - Evidence-Based Progression: \(progressionSnippet)
+            """
+        }
+
+        let goalGuidance = profile.primaryGoal == .bulk ? "Focus on progressive overload with 6-12 rep range for hypertrophy" :
+                           profile.primaryGoal == .cut ? "Maintain strength with moderate volume, 8-12 reps" :
+                           "Balanced approach, 8-10 reps"
+
         return """
-        User Profile:
-        - Goal: \(profile.primaryGoal.rawValue)
-        - Experience: \(profile.fitnessLevel.rawValue)
+        USER PROFILE:
+        - Goal: \(profile.primaryGoal.displayName) (\(goalGuidance))
+        - Experience: \(profile.fitnessLevel.displayName)
 
-        Exercise: \(exercise.name)
-        Last Performance: \(lastPerformance)
+        EXERCISE: \(exercise.name)
+        LAST PERFORMANCE: \(lastPerformance)
+        \(researchContext)
 
-        Recommend sets, reps, and weight for today based on progressive overload principles and the user's goal.
+        Recommend sets, reps, and weight for today based on:
+        1. Progressive overload principles for \(profile.fitnessLevel.rawValue) lifters
+        2. User's \(profile.primaryGoal.rawValue) goal
+        3. Evidence-based progression from research (if available)
+        4. Last performance data
+
+        Apply appropriate progression:
+        - Beginner: 2.5-5% increases when all reps completed
+        - Intermediate: Smaller increments, vary rep ranges
+        - Advanced: Periodization, auto-regulation
 
         Return JSON format:
         {
@@ -214,7 +277,89 @@ class OpenAIService {
             "reps": 10,
             "weight": 135.0,
             "rest_seconds": 90,
-            "notes": "Brief coaching tip"
+            "notes": "Brief evidence-based coaching tip"
+        }
+        """
+    }
+
+    private func buildEnhancedExercisePrompt(
+        profile: UserProfile,
+        workoutType: String,
+        muscleGroup: String,
+        availableExercises: [Exercise],
+        researchExercises: [ExerciseDetail],
+        equipmentFiltered: [ExerciseDetail],
+        orderingPrinciples: ExerciseOrderingResearch?,
+        recentSets: [ExerciseSet]
+    ) -> String {
+        // Format top research exercises with key data
+        let researchContext = researchExercises.prefix(5).map { ex in
+            let safetyEmoji = ex.safetyLevel == .low ? "✅" : ex.safetyLevel == .medium ? "⚠️" : "⚠️⚠️"
+            return """
+            • \(ex.name) \(safetyEmoji):
+              - Activation: \(ex.emgActivation.components(separatedBy: ".").first ?? "High muscle activation")
+              - Hypertrophy: \(ex.effectiveness.hypertrophy)
+              - Strength: \(ex.effectiveness.strength)
+              - Safety: \(ex.injuryRisk)
+              - Best for: \(ex.effectiveness.hypertrophy.contains("High") ? "muscle growth" : "maintenance")
+            """
+        }.joined(separator: "\n\n")
+
+        // Format available exercises from database
+        let availableList = availableExercises.map { ex in
+            "- \(ex.name) (\(ex.isCompound ? "compound" : "isolation"))"
+        }.joined(separator: "\n")
+
+        // Exercise ordering guidance
+        let orderingGuidance = orderingPrinciples?.optimalSequence.components(separatedBy: ".").prefix(2).joined(separator: ". ") ?? "Prioritize compound exercises first, then isolation."
+
+        let goalContext = profile.primaryGoal == .bulk ? "maximize hypertrophy" :
+                          profile.primaryGoal == .cut ? "maintain muscle while managing fatigue" :
+                          "maintain strength and muscle"
+
+        return """
+        EVIDENCE-BASED EXERCISE RESEARCH
+        Top exercises for \(muscleGroup.capitalized) based on EMG studies and effectiveness research:
+
+        \(researchContext)
+
+        EXERCISE ORDERING PRINCIPLE:
+        \(orderingGuidance)
+
+        USER PROFILE:
+        - Primary Goal: \(profile.primaryGoal.displayName) (\(goalContext))
+        - Experience Level: \(profile.fitnessLevel.displayName)
+        - Equipment Access: \(profile.gymType.displayName)
+        - Training Frequency: \(profile.workoutFrequency)x/week
+
+        AVAILABLE EXERCISES IN DATABASE:
+        \(availableList)
+
+        TASK:
+        Recommend 3-5 exercises from the AVAILABLE DATABASE exercises, ordered by priority.
+
+        Match research exercise names to available database exercises when possible.
+        For example: "Barbell Bench Press (Flat)" in research → "Barbell Bench Press" in database
+
+        Prioritize exercises that:
+        1. Have HIGH effectiveness ratings for \(profile.primaryGoal.rawValue) goal
+        2. Are appropriate for \(profile.fitnessLevel.rawValue) level
+        3. Match \(profile.gymType.rawValue) equipment
+        4. Follow evidence-based ordering (compounds before isolation)
+        5. Have good safety profiles for the user's experience level
+
+        CRITICAL: Only recommend exercises that exist in the "AVAILABLE EXERCISES IN DATABASE" list.
+        Reference the research data to explain WHY each exercise is recommended.
+
+        Return JSON format:
+        {
+            "recommendations": [
+                {
+                    "exercise_name": "Exact name from database",
+                    "priority": 1,
+                    "reasoning": "Evidence-based explanation (reference EMG data or effectiveness rating)"
+                }
+            ]
         }
         """
     }
