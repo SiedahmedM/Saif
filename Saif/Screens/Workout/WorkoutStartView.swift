@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkoutStartView: View {
     let selectedPreset: Preset?
     @EnvironmentObject var workoutManager: WorkoutManager
+    @Environment(\.dismiss) private var dismiss
     @State private var isLoading = false
     @State private var started = false
     @State private var showAlternatives = false
@@ -112,10 +113,11 @@ struct WorkoutStartView: View {
                 }
             }
         }
-        .toolbar { Button("End") { goSummary = true } }
+        // Remove legacy End toolbar; end is handled via plan's Current tab summary
         .background(
             Group {
-                NavigationLink(isActive: $goSummary) { PostWorkoutSummaryView() } label: { EmptyView() }
+                // Legacy summary path removed
+                NavigationLink(isActive: $goSummary) { EmptyView() } label: { EmptyView() }
                 NavigationLink(isActive: $goExerciseSelection) { EmptyView() } label: { EmptyView() }
                 NavigationLink(isActive: $goPlan) {
                     if let plan = workoutManager.currentPlan { SessionPlanView(plan: plan).environmentObject(workoutManager) } else { EmptyView() }
@@ -140,6 +142,10 @@ struct WorkoutStartView: View {
         }
         .onChange(of: workoutManager.currentExercise?.id) { _ in
             if workoutManager.currentExercise != nil { navigateToLogging = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .saifWorkoutCompleted)) { _ in
+            // Pop back to Home after save & finish on summary
+            dismiss()
         }
     }
 

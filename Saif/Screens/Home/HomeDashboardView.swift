@@ -846,6 +846,13 @@ extension HomeDashboardView {
             }
         }
         .sheet(isPresented: $showRecoveryInfo) { RecoveryInfoSheet() }
+        .onReceive(NotificationCenter.default.publisher(for: .saifWorkoutCompleted)) { _ in
+            Task {
+                await loadWeeklyStats()
+                recommendation = await workoutManager.getSmartRecommendation()
+                await loadRecoveryStatus()
+            }
+        }
     }
 
     private func loadRecoveryStatus() async {

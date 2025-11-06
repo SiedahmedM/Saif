@@ -161,7 +161,6 @@ class OpenAIService {
         config.timeoutIntervalForResource = 60
         let session = URLSession(configuration: config)
         let start = Date()
-        let start = Date()
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { throw OpenAIError.invalidResponse }
         guard httpResponse.statusCode == 200 else {
@@ -178,8 +177,9 @@ class OpenAIService {
 #if DEBUG
         let ms = Int(Date().timeIntervalSince(start) * 1000)
         print("OpenAI: 200 OK (\(ms)ms). Content chars: \(content.count)")
-#endif
+#else
         let ms = Int(Date().timeIntervalSince(start) * 1000)
+#endif
         print("OpenAI chat completion ok: \(ms)ms, chars=\(content.count)")
         return content
     }

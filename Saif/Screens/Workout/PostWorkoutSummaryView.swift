@@ -5,7 +5,9 @@ struct PostWorkoutSummaryView: View {
     @Environment(\.dismiss) private var dismiss
     var initialNotes: String? = nil
     @State private var summaryData: WorkoutManager.WorkoutSummaryData?
-    @State private var goHome = false
+    @State private var isFinalizing = false
+    @State private var showFinalizeError = false
+    @State private var finalizeMessage: String = ""
 
     var body: some View {
         ZStack { SAIFColors.background.ignoresSafeArea()
@@ -74,22 +76,44 @@ struct PostWorkoutSummaryView: View {
 
                     // Actions
                     VStack(spacing: SAIFSpacing.md) {
-                        PrimaryButton("Done") {
+                        PrimaryButton(isFinalizing ? "Saving..." : "Done") {
+                            if isFinalizing { return }
+                            isFinalizing = true
                             Task {
                                 await workoutManager.completeWorkout(notes: initialNotes)
-                                NotificationCenter.default.post(name: .saifWorkoutCompleted, object: nil)
-                                dismiss()
+                                await MainActor.run {
+                                    isFinalizing = false
+                                    if workoutManager.currentSession == nil {
+                                        NotificationCenter.default.post(name: .saifWorkoutCompleted, object: nil)
+                                        dismiss()
+                                    } else {
+                                        finalizeMessage = "We couldn't save your workout. Please try again."
+                                        showFinalizeError = true
+                                    }
+                                }
                             }
                         }
-                        Button("View Detailed History") { goHome = true }.foregroundStyle(SAIFColors.mutedText)
+                        .disabled(isFinalizing)
                     }
                 }
                 .padding(SAIFSpacing.xl)
             }
         }
         .navigationTitle("Workout Complete").navigationBarTitleDisplayMode(.inline)
+        .interactiveDismissDisabled(true)
         // NavigationLink fallback not needed when presented as a sheet.
         .task { summaryData = await workoutManager.generateWorkoutSummary() }
+        .alert("Save Failed", isPresented: $showFinalizeError) {
+            Button("Retry") {
+                Task {
+                    isFinalizing = true
+                    await workoutManager.completeWorkout(notes: initialNotes)
+                    isFinalizing = false
+                    if workoutManager.currentSession == nil { NotificationCenter.default.post(name: .saifWorkoutCompleted, object: nil); dismiss() }
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { Text(finalizeMessage) }
     }
 
     private var header: some View {
