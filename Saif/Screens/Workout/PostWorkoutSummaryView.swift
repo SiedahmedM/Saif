@@ -77,7 +77,8 @@ struct PostWorkoutSummaryView: View {
                         PrimaryButton("Done") {
                             Task {
                                 await workoutManager.completeWorkout(notes: initialNotes)
-                                goHome = true
+                                NotificationCenter.default.post(name: .saifWorkoutCompleted, object: nil)
+                                dismiss()
                             }
                         }
                         Button("View Detailed History") { goHome = true }.foregroundStyle(SAIFColors.mutedText)
@@ -87,9 +88,7 @@ struct PostWorkoutSummaryView: View {
             }
         }
         .navigationTitle("Workout Complete").navigationBarTitleDisplayMode(.inline)
-        .background(
-            NavigationLink(isActive: $goHome) { HomeRootView() } label: { EmptyView() }
-        )
+        // NavigationLink fallback not needed when presented as a sheet.
         .task { summaryData = await workoutManager.generateWorkoutSummary() }
     }
 
