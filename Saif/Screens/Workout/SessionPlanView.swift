@@ -402,10 +402,7 @@ struct SessionPlanView: View {
         .sheet(isPresented: $showPostSummary) {
             NavigationStack { PostWorkoutSummaryView().environmentObject(workoutManager) }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .saifWorkoutCompleted)) { _ in
-            showPostSummary = false
-            dismiss()
-        }
+        // Avoid calling dismiss() here to prevent stacked dismissals. Summary will handle dismissing.
         .overlay(alignment: .top) {
             if let message = planError {
                 HStack(spacing: SAIFSpacing.sm) {

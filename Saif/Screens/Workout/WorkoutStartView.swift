@@ -143,10 +143,7 @@ struct WorkoutStartView: View {
         .onChange(of: workoutManager.currentExercise?.id) { _ in
             if workoutManager.currentExercise != nil { navigateToLogging = true }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .saifWorkoutCompleted)) { _ in
-            // Pop back to Home after save & finish on summary
-            dismiss()
-        }
+        // Listen to completion if you need UI refreshes, but do not dismiss here to avoid stacked dismissals.
     }
 
     private func showCustomWorkout(presetGroups: [String], presetName: String) {
