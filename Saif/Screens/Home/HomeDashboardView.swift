@@ -17,6 +17,8 @@ struct HomeDashboardView: View {
     @State private var overtrainingWarning: String? = nil
     @State private var sessionsThisWeek: Int = 0
     @State private var setsThisWeek: Int = 0
+    @State private var showToast: Bool = false
+    @State private var toastMessage: String = ""
     @State private var goPlan = false
     @State private var goLog = false
     @State private var showEndWorkoutConfirmation = false
@@ -851,6 +853,25 @@ extension HomeDashboardView {
                 await loadWeeklyStats()
                 recommendation = await workoutManager.getSmartRecommendation()
                 await loadRecoveryStatus()
+            }
+            // Show success toast
+            toastMessage = "Workout saved"
+            withAnimation { showToast = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                withAnimation { showToast = false }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if showToast {
+                Text(toastMessage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.8))
+                    .clipShape(Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
