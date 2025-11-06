@@ -5,19 +5,16 @@ struct WorkoutStartView: View {
     @EnvironmentObject var workoutManager: WorkoutManager
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = false
-    @State private var started = false
+    @State private var navigationPath = NavigationPath()
     @State private var showAlternatives = false
     @State private var showFirstChoice = false
-    @State private var goSummary = false
     @State private var showPlanSheet = false
     @State private var showCustomWorkout = false
-    @State private var goExerciseSelection = false
     @State private var presetMuscleGroups: [String] = []
     @State private var presetWorkoutName: String = ""
-    @State private var navigateToLogging = false
-    @State private var goPlan = false
 
     var body: some View {
+        NavigationStack(path: $navigationPath) {
         ZStack {
             SAIFColors.background.ignoresSafeArea()
             VStack(spacing: SAIFSpacing.xl) {
@@ -64,7 +61,6 @@ struct WorkoutStartView: View {
                 }
 
                 Spacer()
-                NavigationLink(destination: MuscleGroupSelectionView().environmentObject(workoutManager), isActive: $started) { EmptyView() }
             }
             .padding(SAIFSpacing.xl)
         }
@@ -114,25 +110,12 @@ struct WorkoutStartView: View {
             }
         }
         // Remove legacy End toolbar; end is handled via plan's Current tab summary
-        .background(
-            Group {
-                // Legacy summary path removed
-                NavigationLink(isActive: $goSummary) { EmptyView() } label: { EmptyView() }
-                NavigationLink(isActive: $goExerciseSelection) { EmptyView() } label: { EmptyView() }
-                NavigationLink(isActive: $goPlan) {
-                    if let plan = workoutManager.currentPlan { SessionPlanView(plan: plan).environmentObject(workoutManager) } else { EmptyView() }
-                } label: { EmptyView() }
-                NavigationLink(isActive: $navigateToLogging) {
-                    if let ex = workoutManager.currentExercise { ExerciseLoggingView(exercise: ex).environmentObject(workoutManager) } else { EmptyView() }
-                } label: { EmptyView() }
-            }
-        )
         // Plan now navigates as its own page (no sheet)
         .sheet(isPresented: $showCustomWorkout, onDismiss: {
             if workoutManager.currentPlan != nil {
-                goPlan = true
+                navigationPath.append("plan")
             } else if workoutManager.currentSession != nil { // freeform started
-                started = true
+                navigationPath.append("exerciseSelection")
             }
         }) {
             CustomWorkoutSelectionView(
@@ -141,9 +124,25 @@ struct WorkoutStartView: View {
             ).environmentObject(workoutManager)
         }
         .onChange(of: workoutManager.currentExercise?.id) { _ in
-            if workoutManager.currentExercise != nil { navigateToLogging = true }
+            if workoutManager.currentExercise != nil { navigationPath.append("exerciseLogging") }
         }
-        // Listen to completion if you need UI refreshes, but do not dismiss here to avoid stacked dismissals.
+        .onReceive(NotificationCenter.default.publisher(for: .saifWorkoutCompleted)) { _ in
+            if navigationPath.count > 0 { navigationPath.removeLast(navigationPath.count) }
+            dismiss()
+        }
+        .navigationDestination(for: String.self) { dest in
+            switch dest {
+            case "exerciseSelection":
+                MuscleGroupSelectionView().environmentObject(workoutManager)
+            case "exerciseLogging":
+                if let ex = workoutManager.currentExercise { ExerciseLoggingView(exercise: ex).environmentObject(workoutManager) } else { EmptyView() }
+            case "plan":
+                if let plan = workoutManager.currentPlan { SessionPlanView(plan: plan).environmentObject(workoutManager) } else { EmptyView() }
+            default:
+                EmptyView()
+            }
+        }
+        }
     }
 
     private func showCustomWorkout(presetGroups: [String], presetName: String) {
@@ -165,10 +164,10 @@ struct WorkoutStartView: View {
                 isLoading = false
                 if let plan = workoutManager.currentPlan {
                     print("🎯 SHOWING PLAN SHEET - Plan has \(plan.exercises.count) exercises")
-                    goPlan = true
+                    navigationPath.append("plan")
                 } else {
                     print("❌ NO PLAN FOUND - Navigating directly")
-                    started = true
+                    navigationPath.append("exerciseSelection")
                 }
             }
         }

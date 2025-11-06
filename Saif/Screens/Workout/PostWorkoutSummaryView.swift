@@ -76,23 +76,7 @@ struct PostWorkoutSummaryView: View {
 
                     // Actions
                     VStack(spacing: SAIFSpacing.md) {
-                        PrimaryButton(isFinalizing ? "Saving..." : "Done") {
-                            if isFinalizing { return }
-                            isFinalizing = true
-                            Task {
-                                await workoutManager.completeWorkout(notes: initialNotes)
-                                await MainActor.run {
-                                    isFinalizing = false
-                                    if workoutManager.currentSession == nil {
-                                        NotificationCenter.default.post(name: .saifWorkoutCompleted, object: nil)
-                                        dismiss()
-                                    } else {
-                                        finalizeMessage = "We couldn't save your workout. Please try again."
-                                        showFinalizeError = true
-                                    }
-                                }
-                            }
-                        }
+                        PrimaryButton(isFinalizing ? "Saving..." : "Done") { finalizeWorkout() }
                         .disabled(isFinalizing)
                     }
                 }
@@ -105,12 +89,7 @@ struct PostWorkoutSummaryView: View {
         .task { summaryData = await workoutManager.generateWorkoutSummary() }
         .alert("Save Failed", isPresented: $showFinalizeError) {
             Button("Retry") {
-                Task {
-                    isFinalizing = true
-                    await workoutManager.completeWorkout(notes: initialNotes)
-                    isFinalizing = false
-                    if workoutManager.currentSession == nil { NotificationCenter.default.post(name: .saifWorkoutCompleted, object: nil); dismiss() }
-                }
+                finalizeWorkout()
             }
             Button("Cancel", role: .cancel) { }
         } message: { Text(finalizeMessage) }
@@ -129,6 +108,27 @@ struct PostWorkoutSummaryView: View {
                 if let data = summaryData {
                     Text("\(data.actualExercises) exercises • \(data.actualSets) sets • \(data.actualDuration) min")
                         .foregroundStyle(SAIFColors.mutedText)
+                }
+            }
+        }
+    }
+
+    private func finalizeWorkout() {
+        guard !isFinalizing else { return }
+        isFinalizing = true
+        Task {
+            await workoutManager.completeWorkout(notes: initialNotes)
+            await MainActor.run {
+                isFinalizing = false
+                if workoutManager.currentSession == nil {
+                    NotificationCenter.default.post(name: .saifWorkoutCompleted, object: nil)
+                    // Give listeners a beat to react
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        dismiss()
+                    }
+                } else {
+                    finalizeMessage = "Your workout couldn’t be saved. Please try again."
+                    showFinalizeError = true
                 }
             }
         }
