@@ -672,11 +672,15 @@ class WorkoutManager: ObservableObject {
     // MARK: - Preferences
     func loadExercisePreferences() async {
         guard let profile else { return }
-        do {
-            let prefs = try await supabaseService.getExercisePreferences(userId: profile.id)
-            exercisePreferences = prefs
-        } catch {
-            print("❌ [loadExercisePreferences] failed: \(error)")
+        // Fast cached load, then background refresh
+        let cached = await supabaseService.getExercisePreferencesCached(userId: profile.id)
+        exercisePreferences = cached
+        Task.detached { [weak self] in
+            guard let self else { return }
+            do {
+                let fresh = try await self.supabaseService.getExercisePreferences(userId: profile.id)
+                await MainActor.run { self.exercisePreferences = fresh }
+            } catch { print("❌ [loadExercisePreferences.refresh] \(error)") }
         }
     }
 

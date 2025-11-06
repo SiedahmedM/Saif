@@ -63,6 +63,7 @@ struct ExerciseSelectionView: View {
                         }
                     }
                     // Show AI-ordered list when available
+                    LazyVStack(spacing: SAIFSpacing.md) {
                     ForEach(workoutManager.exerciseRecommendations) { rec in
                         let ex = workoutManager.availableExercises.first { $0.name == rec.exerciseName }
                         let exId = ex?.id
@@ -123,9 +124,11 @@ struct ExerciseSelectionView: View {
                             disabled: exId.map { workoutManager.completedExerciseIds.contains($0) } ?? false
                         )
                     }
+                    }
 
                     // Fallback: if AI list is empty but we have exercises, show them directly
                     if workoutManager.exerciseRecommendations.isEmpty && !workoutManager.availableExercises.isEmpty {
+                        LazyVStack(spacing: SAIFSpacing.md) {
                         ForEach(workoutManager.availableExercises, id: \.id) { ex in
                             let isDone = workoutManager.completedExerciseIds.contains(ex.id)
                             AvailableExerciseRow(
@@ -155,6 +158,7 @@ struct ExerciseSelectionView: View {
                                 }
                             )
                             .disabled(isDone)
+                        }
                         }
                     }
 

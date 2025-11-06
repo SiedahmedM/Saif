@@ -17,6 +17,16 @@ class SupabaseService {
         )
     }
 
+    // MARK: - Lightweight In-Memory Cache (TTL)
+    private struct Cached<T> { let value: T; let expiry: Date }
+    private var cacheExercises: [UUID: Cached<Exercise>] = [:]
+    private var cacheSessionsBetween: [String: Cached<[WorkoutSession]>] = [:]
+    private var cachePreferences: [UUID: Cached<[ExercisePreference]>] = [:]
+    private func isExpired(_ date: Date) -> Bool { date < Date() }
+    private func keyForSessions(userId: UUID, start: Date, end: Date) -> String {
+        "\(userId.uuidString)|\(start.timeIntervalSince1970)|\(end.timeIntervalSince1970)"
+    }
+
     // MARK: - Authentication
 
     func signUp(email: String, password: String) async throws -> User {
@@ -331,14 +341,26 @@ class SupabaseService {
 
     func getExercisesByIds(_ ids: [UUID]) async throws -> [Exercise] {
         guard !ids.isEmpty else { return [] }
-        let idStrings = ids.map { $0.uuidString }
-        let response: [Exercise] = try await client.database
-            .from("exercises")
-            .select()
-            .in("id", values: idStrings)
-            .execute()
-            .value
-        return response
+        // Return cached where available and unexpired
+        let ttl: TimeInterval = 10 * 60
+        var results: [Exercise] = []
+        var missing: [UUID] = []
+        let now = Date()
+        for id in ids {
+            if let c = cacheExercises[id], !isExpired(c.expiry) { results.append(c.value) } else { missing.append(id) }
+        }
+        if !missing.isEmpty {
+            let idStrings = missing.map { $0.uuidString }
+            let fresh: [Exercise] = try await client.database
+                .from("exercises")
+                .select()
+                .in("id", values: idStrings)
+                .execute()
+                .value
+            for ex in fresh { cacheExercises[ex.id] = Cached(value: ex, expiry: now.addingTimeInterval(ttl)) }
+            results.append(contentsOf: fresh)
+        }
+        return results
     }
 
     func getExerciseById(_ id: UUID) async throws -> Exercise {
@@ -362,6 +384,21 @@ class SupabaseService {
             .execute()
             .value
         return response
+    }
+
+    // Cached variant to reduce chatter while browsing
+    func getExercisePreferencesCached(userId: UUID) async -> [ExercisePreference] {
+        let ttl: TimeInterval = 60
+        let now = Date()
+        if let c = cachePreferences[userId], !isExpired(c.expiry) { return c.value }
+        do {
+            let fresh = try await getExercisePreferences(userId: userId)
+            cachePreferences[userId] = Cached(value: fresh, expiry: now.addingTimeInterval(ttl))
+            return fresh
+        } catch {
+            print("❌ [getExercisePreferencesCached] \(error)")
+            return cachePreferences[userId]?.value ?? []
+        }
     }
 
     struct PrefUpsert: Encodable {
@@ -612,8 +649,14 @@ class SupabaseService {
 
     // Optional convenience: fetch sessions between dates by client-side filtering
     func getSessionsBetween(userId: UUID, start: Date, end: Date) async throws -> [WorkoutSession] {
+        // Cache recent range by key; keep TTL small
+        let ttl: TimeInterval = 120
+        let key = keyForSessions(userId: userId, start: start, end: end)
+        if let c = cacheSessionsBetween[key], !isExpired(c.expiry) { return c.value }
         let recent = try await getRecentWorkoutSessions(userId: userId, limit: 200)
-        return recent.filter { $0.startedAt >= start && $0.startedAt < end }
+        let filtered = recent.filter { $0.startedAt >= start && $0.startedAt < end }
+        cacheSessionsBetween[key] = Cached(value: filtered, expiry: Date().addingTimeInterval(ttl))
+        return filtered
     }
 
 }

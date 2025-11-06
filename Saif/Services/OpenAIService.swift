@@ -161,6 +161,7 @@ class OpenAIService {
         config.timeoutIntervalForResource = 60
         let session = URLSession(configuration: config)
         let start = Date()
+        let start = Date()
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { throw OpenAIError.invalidResponse }
         guard httpResponse.statusCode == 200 else {
@@ -178,6 +179,8 @@ class OpenAIService {
         let ms = Int(Date().timeIntervalSince(start) * 1000)
         print("OpenAI: 200 OK (\(ms)ms). Content chars: \(content.count)")
 #endif
+        let ms = Int(Date().timeIntervalSince(start) * 1000)
+        print("OpenAI chat completion ok: \(ms)ms, chars=\(content.count)")
         return content
     }
 
@@ -271,12 +274,15 @@ class OpenAIService {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         // simple retry for 429/5xx
+        let start = Date()
         for attempt in 0..<2 {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw OpenAIError.invalidResponse }
             if http.statusCode == 200 {
                 let text = try Self.extractContent(from: data)
                 if let decoded = try? JSONDecoder().decode(CoachResponse.self, from: Data(text.utf8)) {
+                    let ms = Int(Date().timeIntervalSince(start) * 1000)
+                    print("OpenAI coach JSON ok: \(ms)ms, len=\(text.count)")
                     return decoded
                 } else {
                     // Fallback: wrap plain text

@@ -4,6 +4,7 @@ import Foundation
 struct HomeDashboardView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var workoutManager: WorkoutManager
+    @EnvironmentObject var networkMonitor: NetworkMonitor
     @State private var lastSession: WorkoutSession?
     @State private var showChat = false
     @State private var showProfileEdit = false
@@ -848,6 +849,9 @@ extension HomeDashboardView {
     }
 
     private func loadRecoveryStatus() async {
+        if Task.isCancelled { return }
+        // Avoid kicking network calls when offline; keep previous values
+        if let isConnected = try? await Task { @MainActor in networkMonitor.isConnected }.value, !isConnected { return }
         guard let userId = authManager.userProfile?.id else { return }
         let cal = Calendar.current
         let now = Date()
@@ -941,6 +945,9 @@ extension HomeDashboardView {
                 } else { overtrainingWarning = nil }
             }
         } catch {
+            let ns = error as NSError
+            // Suppress noisy -999 (cancelled) errors due to task cancellation/reruns
+            if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled { return }
             print("❌ [HomeDashboardView.loadRecoveryStatus] \(error)")
             // Leave previous values; show gentle warning
             overtrainingWarning = "Network issue loading recovery. Data may be stale."

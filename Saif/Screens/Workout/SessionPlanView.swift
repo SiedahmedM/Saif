@@ -288,6 +288,7 @@ struct SessionPlanView: View {
                                         Spacer()
                                         Button {
                                             Task {
+                                                HapticsService.light()
                                                 print("▶️ [SessionPlan] Start tapped for: \(ex.exerciseName) in \(ex.muscleGroup)")
                                                 if let db = try? await SupabaseService.shared.getExerciseByName(name: ex.exerciseName, muscleGroup: ex.muscleGroup) {
                                                     print("✅ [SessionPlan] Resolved DB exercise: \(db.name) → opening logging sheet")
