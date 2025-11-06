@@ -3,6 +3,14 @@ import SwiftUI
 struct OnboardingCoordinator: View {
     // Optional reference for when called from AuthFlow
     var authManager: AuthManager? = nil
+    @AppStorage("onboarding_current_step") private var savedStep: Int = 0
+    @AppStorage("onboarding_incomplete") private var onboardingIncomplete: Bool = true
+    @AppStorage("onboarding_name") private var savedName: String = ""
+    @AppStorage("onboarding_goal") private var savedGoal: String = Goal.bulk.rawValue
+    @AppStorage("onboarding_fitness") private var savedFitness: String = FitnessLevel.beginner.rawValue
+    @AppStorage("onboarding_freq") private var savedFreq: Int = 3
+    @AppStorage("onboarding_gym") private var savedGym: String = GymType.commercial.rawValue
+    @AppStorage("onboarding_injuries") private var savedInjuries: String = ""
     @State private var currentStep = 0
     @State private var profile = OnboardingProfile()
 
@@ -37,6 +45,14 @@ struct OnboardingCoordinator: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut, value: currentStep)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onboardingIncomplete = true; savedStep = currentStep }
+                }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if currentStep > 0 { Button("Back") { currentStep = max(0, currentStep-1) } }
+                }
+            }
 
             VStack {
                 HStack(spacing: 8) {
@@ -51,6 +67,26 @@ struct OnboardingCoordinator: View {
                 Spacer()
             }
         }
+        .onAppear {
+            if onboardingIncomplete {
+                currentStep = savedStep
+                profile = OnboardingProfile(
+                    name: savedName,
+                    goal: Goal(rawValue: savedGoal) ?? .bulk,
+                    fitnessLevel: FitnessLevel(rawValue: savedFitness) ?? .beginner,
+                    workoutFrequency: savedFreq,
+                    gymType: GymType(rawValue: savedGym) ?? .commercial,
+                    injuries: savedInjuries
+                )
+            }
+        }
+        .onChange(of: currentStep) { _, new in savedStep = new }
+        .onChange(of: profile.name) { _, new in savedName = new }
+        .onChange(of: profile.goal) { _, new in savedGoal = new.rawValue }
+        .onChange(of: profile.fitnessLevel) { _, new in savedFitness = new.rawValue }
+        .onChange(of: profile.workoutFrequency) { _, new in savedFreq = new }
+        .onChange(of: profile.gymType) { _, new in savedGym = new.rawValue }
+        .onChange(of: profile.injuries) { _, new in savedInjuries = new }
     }
 }
 
@@ -85,6 +121,8 @@ struct OnboardingWelcome: View {
             Spacer()
             VStack(spacing: SAIFSpacing.md) {
                 PrimaryButton("Get Started") { onNext() }
+                Button("Skip for now") { onNext() }
+                    .foregroundStyle(SAIFColors.mutedText)
             }
             .padding(SAIFSpacing.xl)
         }
@@ -251,6 +289,7 @@ struct OnboardingComplete: View {
     let profile: OnboardingProfile
     var authManager: AuthManager? = nil
     @State private var isLoading = false
+    @State private var goFirst = false
 
     var body: some View {
         OnboardingTemplate(
@@ -276,13 +315,15 @@ struct OnboardingComplete: View {
                     isLoading = true
                     Task {
                         if let ok = await authManager?.completeOnboarding(profile: profile), ok {
-                            // AuthFlowView will react to userProfile set and navigate to main automatically.
+                            UserDefaults.standard.set(false, forKey: "onboarding_incomplete")
+                            goFirst = true
                         }
                         isLoading = false
                     }
                 }
                 .padding(.top, SAIFSpacing.xl)
             }
+            NavigationLink(isActive: $goFirst) { FirstWorkoutIntroView() } label: { EmptyView() }
         }
     }
 }

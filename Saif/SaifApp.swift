@@ -11,6 +11,7 @@ import SwiftUI
 struct SaifApp: App {
     @StateObject private var authManager = AuthManager()
     @StateObject private var workoutManager = WorkoutManager()
+    @StateObject private var networkMonitor = NetworkMonitor()
 
     init() {
         print("🟢 App init started")
@@ -24,6 +25,7 @@ struct SaifApp: App {
             NavigationStack { AuthFlowView() }
                 .environmentObject(authManager)
                 .environmentObject(workoutManager)
+                .environmentObject(networkMonitor)
                 .tint(SAIFColors.primary)
         }
     }

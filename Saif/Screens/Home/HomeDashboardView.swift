@@ -31,13 +31,24 @@ struct HomeDashboardView: View {
                     header
                     quickActions
 
-                    if let stats = weeklyStats {
-                        ProgressRingsCard(stats: stats)
-                    }
+            if let stats = weeklyStats {
+                ProgressRingsCard(stats: stats)
+            }
 
-                    if let rec = recommendation {
-                        SmartRecommendationCard(recommendation: rec)
+            if let rec = recommendation {
+                SmartRecommendationCard(recommendation: rec)
+            } else if lastSession == nil {
+                CardView(title: "GET STARTED") {
+                    VStack(spacing: SAIFSpacing.md) {
+                        Text("Let’s start your first session!")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(SAIFColors.text)
+                        NavigationLink(destination: WorkoutStartView(selectedPreset: nil)) {
+                            Text("Begin Now").font(.system(size: 16, weight: .semibold)).frame(maxWidth: .infinity).padding().foregroundStyle(.white).background(Color.green).clipShape(RoundedRectangle(cornerRadius: SAIFRadius.lg))
+                        }
                     }
+                }
+            }
 
                     profileCard
                     recoveryStatusCard
