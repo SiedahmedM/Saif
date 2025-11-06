@@ -3,6 +3,7 @@ import SwiftUI
 struct ExerciseSelectionView: View {
     let muscleGroup: String
     @EnvironmentObject var workoutManager: WorkoutManager
+    @EnvironmentObject var authManager: AuthManager
     @State private var goLog = false
     @State private var selectedExercise: Exercise?
     @State private var goSummary = false
@@ -10,6 +11,13 @@ struct ExerciseSelectionView: View {
     @State private var showInfo = false
     @State private var infoDetail: ExerciseDetail? = nil
     @State private var infoIsCompound: Bool = true
+    @State private var userInjuries: [String] = []
+    @State private var showPlan = false
+    @State private var showToast = false
+    @State private var toastMessage: String = ""
+    @State private var showPrefSheet = false
+    @State private var prefExerciseId: UUID? = nil
+    @State private var prefExerciseName: String = ""
 
     var body: some View {
         ZStack { SAIFColors.background.ignoresSafeArea()
@@ -56,76 +64,97 @@ struct ExerciseSelectionView: View {
                     }
                     // Show AI-ordered list when available
                     ForEach(workoutManager.exerciseRecommendations) { rec in
-                        Button {
-                            let ex = workoutManager.availableExercises.first { $0.name == rec.exerciseName } ?? Exercise(id: UUID(), name: rec.exerciseName, muscleGroup: muscleGroup, workoutType: workoutManager.currentSession?.workoutType ?? "", equipment: [], difficulty: .beginner, isCompound: true, description: "", formCues: [])
-                            selectedExercise = ex
-                            Task { await workoutManager.selectExercise(ex); goLog = true }
-                        } label: {
-                            let exId = workoutManager.availableExercises.first{ $0.name == rec.exerciseName }?.id
-                            let isDone = exId.map { workoutManager.completedExerciseIds.contains($0) } ?? false
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    VStack(alignment: .leading) {
-                                        Text(rec.exerciseName)
-                                            .foregroundStyle(isDone ? SAIFColors.mutedText : SAIFColors.text)
-                                            .font(.system(size: 18, weight: .semibold))
-                                        HStack(spacing: 8) {
-                                            Text("Priority \(rec.priority)").foregroundStyle(SAIFColors.mutedText).font(.system(size: 14))
-                                            if let sets = rec.sets { Text("Sets: \(sets)").foregroundStyle(SAIFColors.mutedText).font(.system(size: 14)) }
-                                            if isDone { Text("Completed").font(.system(size: 12, weight: .bold)).foregroundStyle(SAIFColors.primary) }
-                                        }
-                                    }
-                                    Spacer()
-                                    HStack(spacing: 12) {
-                                        Button {
-                                            let ex = workoutManager.availableExercises.first{ $0.name == rec.exerciseName }
-                                            infoIsCompound = ex?.isCompound ?? true
-                                            infoDetail = workoutManager.researchDetails(for: rec.exerciseName)
-                                            showInfo = true
-                                        } label: {
-                                            Image(systemName: "info.circle")
-                                                .foregroundStyle(SAIFColors.primary)
-                                        }
-                                        Image(systemName: "chevron.right").foregroundStyle(SAIFColors.mutedText)
-                                    }
+                        let ex = workoutManager.availableExercises.first { $0.name == rec.exerciseName }
+                        let exId = ex?.id
+                        let isDone = exId.map { workoutManager.completedExerciseIds.contains($0) } ?? false
+                        let detail = TrainingKnowledgeService.shared.findExercise(named: rec.exerciseName)
+                        let safetyStatus: ExerciseSafetyStatus = {
+                            guard let detail else { return .safe }
+                            let res = InjuryRuleEngine.shared.filterExercises([detail], injuries: userInjuries).first
+                            return res?.status ?? .safe
+                        }()
+
+                        AICandidateRow(
+                            title: rec.exerciseName,
+                            sets: rec.sets,
+                            priority: rec.priority,
+                            isDone: isDone,
+                            safetyStatus: safetyStatus,
+                            isFavorite: exId.map { workoutManager.isFavorite($0) } ?? false,
+                            onInfo: {
+                                infoIsCompound = ex?.isCompound ?? true
+                                infoDetail = workoutManager.researchDetails(for: rec.exerciseName)
+                                showInfo = true
+                            },
+                            onToggleFavorite: {
+                                guard let id = exId else { return }
+                                Task {
+                                    let fav = workoutManager.isFavorite(id)
+                                    await workoutManager.setExercisePreference(exerciseId: id, level: fav ? .neutral : .favorite, reason: nil)
+                                    withAnimation { showToast = true; toastMessage = fav ? "Removed from favorites" : "Added to favorites" }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { withAnimation { showToast = false } }
                                 }
-                                // Reasoning moved to info sheet for clarity
-                            }
-                                .padding(SAIFSpacing.lg)
-                                .background(SAIFColors.surface)
-                                .overlay(RoundedRectangle(cornerRadius: SAIFRadius.lg).stroke(SAIFColors.border, lineWidth: 1))
-                                .clipShape(RoundedRectangle(cornerRadius: SAIFRadius.lg))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled({ let id = workoutManager.availableExercises.first{ $0.name == rec.exerciseName }?.id; return id.map{ workoutManager.completedExerciseIds.contains($0) } ?? false }())
+                            },
+                            onLongPressFavorite: {
+                                if let id = exId {
+                                    prefExerciseId = id
+                                    prefExerciseName = rec.exerciseName
+                                    showPrefSheet = true
+                                }
+                            },
+                            onReplace: {
+                                let chosen = ex ?? Exercise(id: UUID(), name: rec.exerciseName, muscleGroup: muscleGroup, workoutType: workoutManager.currentSession?.workoutType ?? "", equipment: [], difficulty: .beginner, isCompound: true, description: "", formCues: [])
+                                Task {
+                                    await workoutManager.replaceNextPlannedExercise(group: muscleGroup, with: chosen)
+                                    toastMessage = "Plan updated: replaced next \(muscleGroup.capitalized) exercise"
+                                    showToast = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { showToast = false }
+                                }
+                            },
+                            onTap: {
+                                let chosen = ex ?? Exercise(id: UUID(), name: rec.exerciseName, muscleGroup: muscleGroup, workoutType: workoutManager.currentSession?.workoutType ?? "", equipment: [], difficulty: .beginner, isCompound: true, description: "", formCues: [])
+                                selectedExercise = chosen
+                                Task {
+                                    await workoutManager.replaceNextPlannedExercise(group: muscleGroup, with: chosen)
+                                    await workoutManager.selectExercise(chosen)
+                                    await MainActor.run { goLog = true }
+                                }
+                            },
+                            disabled: exId.map { workoutManager.completedExerciseIds.contains($0) } ?? false
+                        )
                     }
 
                     // Fallback: if AI list is empty but we have exercises, show them directly
                     if workoutManager.exerciseRecommendations.isEmpty && !workoutManager.availableExercises.isEmpty {
                         ForEach(workoutManager.availableExercises, id: \.id) { ex in
-                            Button {
-                                selectedExercise = ex
-                                Task { await workoutManager.selectExercise(ex); goLog = true }
-                            } label: {
-                                let isDone = workoutManager.completedExerciseIds.contains(ex.id)
-                                HStack {
-                                    VStack(alignment: .leading) {
-                                        Text(ex.name).foregroundStyle(isDone ? SAIFColors.mutedText : SAIFColors.text).font(.system(size: 18, weight: .semibold))
-                                        HStack(spacing: 8) {
-                                            Text(ex.muscleGroup.capitalized).foregroundStyle(SAIFColors.mutedText).font(.system(size: 14))
-                                            if isDone { Text("Completed").font(.system(size: 12, weight: .bold)).foregroundStyle(SAIFColors.primary) }
-                                        }
+                            let isDone = workoutManager.completedExerciseIds.contains(ex.id)
+                            AvailableExerciseRow(
+                                title: ex.name,
+                                subtitle: ex.muscleGroup.capitalized,
+                                isDone: isDone,
+                                isFavorite: workoutManager.isFavorite(ex.id),
+                                onToggleFavorite: {
+                                    Task {
+                                        let fav = workoutManager.isFavorite(ex.id)
+                                        await workoutManager.setExercisePreference(exerciseId: ex.id, level: fav ? .neutral : .favorite, reason: nil)
+                                        withAnimation { showToast = true; toastMessage = fav ? "Removed from favorites" : "Added to favorites" }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { withAnimation { showToast = false } }
                                     }
-                                    Spacer()
-                                    Image(systemName: "chevron.right").foregroundStyle(SAIFColors.mutedText)
+                                },
+                                onLongPressFavorite: {
+                                    prefExerciseId = ex.id
+                                    prefExerciseName = ex.name
+                                    showPrefSheet = true
+                                },
+                                onTap: {
+                                    selectedExercise = ex
+                                    Task {
+                                        await workoutManager.selectExercise(ex)
+                                        await MainActor.run { goLog = true }
+                                    }
                                 }
-                                .padding(SAIFSpacing.lg)
-                                .background(SAIFColors.surface)
-                                .overlay(RoundedRectangle(cornerRadius: SAIFRadius.lg).stroke(SAIFColors.border, lineWidth: 1))
-                                .clipShape(RoundedRectangle(cornerRadius: SAIFRadius.lg))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(workoutManager.completedExerciseIds.contains(ex.id))
+                            )
+                            .disabled(isDone)
                         }
                     }
 
@@ -143,16 +172,47 @@ struct ExerciseSelectionView: View {
         .navigationTitle("SAIF")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("End") { goSummary = true } }
+        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Plan") { showPlan = true } } }
+        .sheet(isPresented: $showPlan) {
+            if let plan = workoutManager.currentPlan {
+                NavigationStack { SessionPlanView(plan: plan).environmentObject(workoutManager) }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if showToast {
+                Text(toastMessage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.8))
+                    .clipShape(Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .sheet(isPresented: $showInfo) {
             ResearchInfoView(exercise: infoDetail, isCompound: infoIsCompound)
         }
+        .sheet(isPresented: $showPrefSheet) {
+            ExercisePreferenceSheet(
+                exerciseId: prefExerciseId,
+                exerciseName: prefExerciseName,
+                muscleGroup: muscleGroup
+            )
+            .environmentObject(workoutManager)
+        }
         .background(
             Group {
-                NavigationLink(isActive: $goSummary) { WorkoutSummaryView() } label: { EmptyView() }
-                NavigationLink(isActive: $goNextGroups) { NextSuggestionsView(currentGroupToExclude: muscleGroup) } label: { EmptyView() }
+                NavigationLink(isActive: $goSummary) { PostWorkoutSummaryView() } label: { EmptyView() }
+                // Retired legacy next suggestions view
+                EmptyView()
             }
         )
         .task {
+            // Parse injuries from profile array into tags
+            let injuriesText = (authManager.userProfile?.injuriesLimitations ?? []).joined(separator: ", ")
+            userInjuries = InjuryRuleEngine.shared.parseInjuries(from: injuriesText)
             if workoutManager.availableExercises.isEmpty || workoutManager.exerciseDebug == nil {
                 await workoutManager.getExerciseRecommendations(for: muscleGroup)
             }
@@ -160,7 +220,134 @@ struct ExerciseSelectionView: View {
     }
 }
 
-#Preview { NavigationStack { ExerciseSelectionView(muscleGroup: "chest").environmentObject(WorkoutManager()) } }
+// MARK: - Row Components
+private struct AICandidateRow: View {
+    let title: String
+    let sets: Int?
+    let priority: Int
+    let isDone: Bool
+    let safetyStatus: ExerciseSafetyStatus
+    let isFavorite: Bool
+    let onInfo: () -> Void
+    let onToggleFavorite: () -> Void
+    let onLongPressFavorite: () -> Void
+    let onReplace: () -> Void
+    let onTap: () -> Void
+    let disabled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SAIFSpacing.sm) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text(title)
+                        .foregroundStyle(isDone ? SAIFColors.mutedText : SAIFColors.text)
+                        .font(.system(size: 18, weight: .semibold))
+                    HStack(spacing: 8) {
+                        Text("Priority \(priority)").foregroundStyle(SAIFColors.mutedText).font(.system(size: 14))
+                        if let sets { Text("Sets: \(sets)").foregroundStyle(SAIFColors.mutedText).font(.system(size: 14)) }
+                        if isDone { Text("Completed").font(.system(size: 12, weight: .bold)).foregroundStyle(SAIFColors.primary) }
+                    }
+                }
+                Spacer()
+                SafetyStatusBadge(status: safetyStatus)
+                HStack(spacing: 12) {
+                    Button(action: onInfo) {
+                        Image(systemName: "info.circle").foregroundStyle(SAIFColors.primary)
+                    }
+                    Button(action: {
+                        print("❤️ Heart tapped for exercise: \(title)")
+                        print("  - Current favorite status: \(isFavorite)")
+                        onToggleFavorite()
+                    }) {
+                        Image(systemName: isFavorite ? "heart.fill" : "heart").foregroundStyle(isFavorite ? .red : SAIFColors.mutedText)
+                    }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(LongPressGesture().onEnded { _ in onLongPressFavorite() })
+                    Button(action: onReplace) {
+                        Text("Replace").font(.system(size: 12, weight: .semibold))
+                    }
+                    Image(systemName: "chevron.right").foregroundStyle(SAIFColors.mutedText)
+                }
+            }
+        }
+        .padding(SAIFSpacing.lg)
+        .background(SAIFColors.surface)
+        .overlay(RoundedRectangle(cornerRadius: SAIFRadius.lg).stroke(SAIFColors.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: SAIFRadius.lg))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+        .disabled(disabled)
+    }
+}
+
+private struct AvailableExerciseRow: View {
+    let title: String
+    let subtitle: String
+    let isDone: Bool
+    let isFavorite: Bool
+    let onToggleFavorite: () -> Void
+    let onLongPressFavorite: () -> Void
+    let onTap: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(title).foregroundStyle(isDone ? SAIFColors.mutedText : SAIFColors.text).font(.system(size: 18, weight: .semibold))
+                HStack(spacing: 8) {
+                    Text(subtitle).foregroundStyle(SAIFColors.mutedText).font(.system(size: 14))
+                    if isDone { Text("Completed").font(.system(size: 12, weight: .bold)).foregroundStyle(SAIFColors.primary) }
+                }
+            }
+            Spacer()
+            Button(action: {
+                print("❤️ Heart tapped for exercise: \(title)")
+                print("  - Current favorite status: \(isFavorite)")
+                onToggleFavorite()
+            }) {
+                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    .foregroundStyle(isFavorite ? .red : SAIFColors.mutedText)
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(LongPressGesture().onEnded { _ in onLongPressFavorite() })
+            Image(systemName: "chevron.right").foregroundStyle(SAIFColors.mutedText)
+        }
+        .padding(SAIFSpacing.lg)
+        .background(SAIFColors.surface)
+        .overlay(RoundedRectangle(cornerRadius: SAIFRadius.lg).stroke(SAIFColors.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: SAIFRadius.lg))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
+}
+
+#Preview { NavigationStack { ExerciseSelectionView(muscleGroup: "chest").environmentObject(WorkoutManager()).environmentObject(AuthManager()) } }
+
+struct SafetyStatusBadge: View {
+    let status: ExerciseSafetyStatus
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+            Text(label)
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.1))
+        .clipShape(Capsule())
+    }
+    
+    private var icon: String {
+        switch status { case .safe: return "checkmark.shield.fill"; case .caution: return "exclamationmark.triangle.fill"; case .avoid: return "xmark.shield.fill" }
+    }
+    private var label: String {
+        switch status { case .safe: return "Safe"; case .caution: return "Caution"; case .avoid: return "Avoid" }
+    }
+    private var color: Color {
+        switch status { case .safe: return .green; case .caution: return .orange; case .avoid: return .red }
+    }
+}
 
 // MARK: - Volume Progress Card (ExerciseSelection)
 private struct SelectionVolumeProgressCard: View {

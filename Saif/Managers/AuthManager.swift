@@ -65,8 +65,7 @@ class AuthManager: ObservableObject {
                 }
             }
             isAuthenticated = true
-            // Ensure state is fully synced after auth
-            await checkAuthStatus()
+            // Avoid immediately re-checking status to prevent redundant reloads
         } catch { self.error = error.localizedDescription; isAuthenticated = false }
     }
 

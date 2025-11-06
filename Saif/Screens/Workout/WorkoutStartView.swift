@@ -8,6 +8,13 @@ struct WorkoutStartView: View {
     @State private var showAlternatives = false
     @State private var showFirstChoice = false
     @State private var goSummary = false
+    @State private var showPlanSheet = false
+    @State private var showCustomWorkout = false
+    @State private var goExerciseSelection = false
+    @State private var presetMuscleGroups: [String] = []
+    @State private var presetWorkoutName: String = ""
+    @State private var navigateToLogging = false
+    @State private var goPlan = false
 
     var body: some View {
         ZStack {
@@ -72,9 +79,27 @@ struct WorkoutStartView: View {
         }
         .actionSheet(isPresented: $showAlternatives) {
             ActionSheet(title: Text("Choose Workout Type"), buttons: [
-                .default(Text("Push")) { start(workoutType: "push") },
-                .default(Text("Pull")) { start(workoutType: "pull") },
-                .default(Text("Legs")) { start(workoutType: "legs") },
+                .default(Text("Push (Chest, Shoulders, Triceps)")) {
+                    start(workoutType: "push")
+                },
+                .default(Text("Pull (Back, Biceps)")) {
+                    start(workoutType: "pull")
+                },
+                .default(Text("Legs (Quads, Hamstrings, Glutes)")) {
+                    start(workoutType: "legs")
+                },
+                .default(Text("Upper Body (Customize...)")) {
+                    showCustomWorkout(presetGroups: ["chest", "back", "shoulders"], presetName: "Upper Body")
+                },
+                .default(Text("Lower Body (Customize...)")) {
+                    showCustomWorkout(presetGroups: ["quads", "hamstrings", "glutes"], presetName: "Lower Body")
+                },
+                .default(Text("Full Body (Customize...)")) {
+                    showCustomWorkout(presetGroups: ["chest", "back", "shoulders", "quads", "hamstrings"], presetName: "Full Body")
+                },
+                .default(Text("Build From Scratch...")) {
+                    showCustomWorkout(presetGroups: [], presetName: "Custom Workout")
+                },
                 .cancel()
             ])
         }
@@ -89,8 +114,39 @@ struct WorkoutStartView: View {
         }
         .toolbar { Button("End") { goSummary = true } }
         .background(
-            NavigationLink(isActive: $goSummary) { WorkoutSummaryView() } label: { EmptyView() }
+            Group {
+                NavigationLink(isActive: $goSummary) { PostWorkoutSummaryView() } label: { EmptyView() }
+                NavigationLink(isActive: $goExerciseSelection) { EmptyView() } label: { EmptyView() }
+                NavigationLink(isActive: $goPlan) {
+                    if let plan = workoutManager.currentPlan { SessionPlanView(plan: plan).environmentObject(workoutManager) } else { EmptyView() }
+                } label: { EmptyView() }
+                NavigationLink(isActive: $navigateToLogging) {
+                    if let ex = workoutManager.currentExercise { ExerciseLoggingView(exercise: ex).environmentObject(workoutManager) } else { EmptyView() }
+                } label: { EmptyView() }
+            }
         )
+        // Plan now navigates as its own page (no sheet)
+        .sheet(isPresented: $showCustomWorkout, onDismiss: {
+            if workoutManager.currentPlan != nil {
+                goPlan = true
+            } else if workoutManager.currentSession != nil { // freeform started
+                started = true
+            }
+        }) {
+            CustomWorkoutSelectionView(
+                presetGroups: presetMuscleGroups,
+                presetName: presetWorkoutName
+            ).environmentObject(workoutManager)
+        }
+        .onChange(of: workoutManager.currentExercise?.id) { _ in
+            if workoutManager.currentExercise != nil { navigateToLogging = true }
+        }
+    }
+
+    private func showCustomWorkout(presetGroups: [String], presetName: String) {
+        presetMuscleGroups = presetGroups
+        presetWorkoutName = presetName
+        showCustomWorkout = true
     }
 
     private func hint(for preset: Preset) -> String {
@@ -99,7 +155,20 @@ struct WorkoutStartView: View {
 
     private func start(workoutType: String) {
         isLoading = true
-        Task { await workoutManager.startWorkout(workoutType: workoutType); isLoading = false; started = true }
+        Task {
+            await workoutManager.startWorkout(workoutType: workoutType)
+            // Ensure UI updates on main thread
+            await MainActor.run {
+                isLoading = false
+                if let plan = workoutManager.currentPlan {
+                    print("🎯 SHOWING PLAN SHEET - Plan has \(plan.exercises.count) exercises")
+                    goPlan = true
+                } else {
+                    print("❌ NO PLAN FOUND - Navigating directly")
+                    started = true
+                }
+            }
+        }
     }
 }
 

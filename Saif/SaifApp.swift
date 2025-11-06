@@ -20,8 +20,7 @@ struct SaifApp: App {
     }
 
     var body: some Scene {
-        print("🟢 Body evaluated")
-        return WindowGroup {
+        WindowGroup {
             NavigationStack { AuthFlowView() }
                 .environmentObject(authManager)
                 .environmentObject(workoutManager)

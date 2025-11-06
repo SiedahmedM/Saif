@@ -64,9 +64,14 @@ struct ExerciseDetail: Codable, Identifiable {
 
     var safetyLevel: SafetyLevel {
         let r = injuryRisk.lowercased()
-        if r.contains("very low") || r == "low" { return .low }
-        if r.contains("low/medium") || r.contains("medium") { return .medium }
-        return .high
+        // Order matters to avoid "low" being swallowed by "low/medium"
+        if r.contains("very low") { return .low }
+        if r.contains("low/medium") { return .medium }
+        if r.hasPrefix("low") || r.contains("low –") || r.contains("low -") { return .low }
+        if r.contains("medium") { return .medium }
+        if r.contains("low") { return .low }
+        if r.contains("high") { return .high }
+        return .medium
     }
 }
 

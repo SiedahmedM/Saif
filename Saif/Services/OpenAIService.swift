@@ -32,7 +32,9 @@ class OpenAIService {
         workoutType: String,
         muscleGroup: String,
         availableExercises: [Exercise],
-        recentSets: [ExerciseSet]
+        recentSets: [ExerciseSet],
+        favorites: [String] = [],
+        avoids: [String] = []
     ) async throws -> ExerciseRecommendationResponse {
         // Query research knowledge; gracefully fallback if unavailable
         let researchExercises = TrainingKnowledgeService.shared.getExercisesRanked(
@@ -57,7 +59,9 @@ class OpenAIService {
                 researchExercises: researchExercises,
                 equipmentFiltered: equipmentFiltered,
                 orderingPrinciples: orderingPrinciples,
-                recentSets: recentSets
+                recentSets: recentSets,
+                favorites: favorites,
+                avoids: avoids
             )
         } else {
             // Fallback to existing simpler prompt
@@ -66,7 +70,9 @@ class OpenAIService {
                 workoutType: workoutType,
                 muscleGroup: muscleGroup,
                 availableExercises: availableExercises,
-                recentSets: recentSets
+                recentSets: recentSets,
+                favorites: favorites,
+                avoids: avoids
             )
         }
 
@@ -117,7 +123,7 @@ class OpenAIService {
         )
 
         let response = try await callGPT4(
-            systemPrompt: "You are a workout programming expert. Recommend the order of muscle groups to train for optimal results. Return as JSON array.",
+            systemPrompt: "You are a workout programming expert. Recommend the order of muscle groups to train for optimal results. Return JSON object exactly with {\"priorityOrder\": [\"group1\", \"group2\", ...] }.",
             userPrompt: prompt
         )
 
@@ -175,6 +181,125 @@ class OpenAIService {
         return content
     }
 
+    // MARK: - Contextual Chat (Coach)
+    func chatWithContext(message: String, context: String, conversationHistory: [ChatMessage]) async throws -> String {
+        guard let url = URL(string: baseURL) else { throw OpenAIError.invalidURL }
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw OpenAIError.missingAPIKey }
+
+        // Build messages with system context and prior conversation
+        var msgs: [[String: Any]] = [["role": "system", "content": "You are a knowledgeable personal trainer helping a user during their workout. Keep answers concise and actionable.\n\n" + context]]
+        for m in conversationHistory {
+            msgs.append(["role": m.role == .user ? "user" : "assistant", "content": m.content])
+        }
+        msgs.append(["role": "user", "content": message])
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "model": "gpt-4o-mini",
+            "messages": msgs,
+            "max_tokens": 300,
+            "temperature": 0.7
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = 30
+        cfg.timeoutIntervalForResource = 60
+        let session = URLSession(configuration: cfg)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw OpenAIError.invalidResponse }
+        guard http.statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? "<no body>"
+            print("OpenAI chat error (status \(http.statusCode)): \(body)")
+            throw OpenAIError.apiError(statusCode: http.statusCode, body: body)
+        }
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let choices = json?["choices"] as? [[String: Any]],
+              let first = choices.first,
+              let msg = first["message"] as? [String: Any],
+              let content = msg["content"] as? String else { throw OpenAIError.invalidResponse }
+        return content
+    }
+
+    // Strict JSON-driven coach with richer context and few-shots
+    func chatWithContextJSON(message: String, context: String, conversationHistory: [ChatMessage], tone: String = "brief") async throws -> CoachResponse {
+        guard let url = URL(string: baseURL) else { throw OpenAIError.invalidURL }
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw OpenAIError.missingAPIKey }
+
+        let system = """
+        You are an evidence-based strength coach. Respect injuries and constraints. Keep answers ≤ 100 words, use short bullets, include one clear action, and ask 1 clarifying question if uncertain. Verify any load change is within 3–25% clamps and rounded to available equipment increments.
+
+        CONTEXT:\n\n\(context)
+
+        Return ONLY JSON with this schema:
+        {
+          "summary": "string",
+          "cues": ["string"],
+          "action": { "type": "increase_load|decrease_load|keep|rest|substitute", "delta_lb": 0, "seconds": 0 },
+          "risk_flags": ["string"],
+          "next_question": "string",
+          "tool_call": { "name": "swapExercise|setRestTimer|logSet|updatePreference", "params": { } }
+        }
+
+        FEW-SHOTS (examples):
+        - Too light: 18 reps in 8–12 range → suggest +5–10 lb, rounded to step.
+        - Too heavy early: RPE 9 on set 1–2 → suggest 3–5 min rest or -5–10% load.
+        - Pain flag: if elbow pain on skull crushers → suggest safer substitute and caution.
+        - Substitution: if equipment not available → suggest close variant.
+        """
+
+        var msgs: [[String: Any]] = [["role": "system", "content": system]]
+        for m in conversationHistory {
+            msgs.append(["role": m.role == .user ? "user" : "assistant", "content": m.content])
+        }
+        msgs.append(["role": "user", "content": message])
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "model": "gpt-4o-mini",
+            "messages": msgs,
+            "temperature": 0.5,
+            "max_tokens": 350,
+            "response_format": ["type": "json_object"]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        // simple retry for 429/5xx
+        for attempt in 0..<2 {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw OpenAIError.invalidResponse }
+            if http.statusCode == 200 {
+                let text = try Self.extractContent(from: data)
+                if let decoded = try? JSONDecoder().decode(CoachResponse.self, from: Data(text.utf8)) {
+                    return decoded
+                } else {
+                    // Fallback: wrap plain text
+                    return CoachResponse(summary: text, cues: [], action: nil, riskFlags: [], nextQuestion: "", toolCall: nil)
+                }
+            }
+            if http.statusCode == 429 || http.statusCode >= 500 { try await Task.sleep(nanoseconds: 400_000_000) ; continue }
+            let body = String(data: data, encoding: .utf8) ?? "<no body>"
+            print("OpenAI chat JSON error (status \(http.statusCode)): \(body)")
+            throw OpenAIError.apiError(statusCode: http.statusCode, body: body)
+        }
+        throw OpenAIError.apiError(statusCode: 429, body: "rate limited after retries")
+    }
+
+    private static func extractContent(from data: Data) throws -> String {
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let choices = json?["choices"] as? [[String: Any]],
+              let first = choices.first,
+              let msg = first["message"] as? [String: Any],
+              let content = msg["content"] as? String else { throw OpenAIError.invalidResponse }
+        return content
+    }
+
     // MARK: - Prompt Builders
     private func buildWorkoutTypePrompt(profile: UserProfile, recentWorkouts: [WorkoutSession]) -> String {
         let recentWorkoutSummary = recentWorkouts.prefix(5).map { w in
@@ -209,9 +334,12 @@ class OpenAIService {
         workoutType: String,
         muscleGroup: String,
         availableExercises: [Exercise],
-        recentSets: [ExerciseSet]
+        recentSets: [ExerciseSet],
+        favorites: [String],
+        avoids: [String]
     ) -> String {
         let exerciseList = availableExercises.prefix(10).map { "\($0.name) (\($0.muscleGroup))" }.joined(separator: ", ")
+        let preferences = preferencesText(favorites: favorites, avoids: avoids)
         return """
         You are an expert strength coach selecting exercises.
 
@@ -223,10 +351,12 @@ class OpenAIService {
         - Experience: \(profile.fitnessLevel.rawValue)
         - Workout Type: \(workoutType)
         - Target Muscle Group: \(muscleGroup)
+        \(preferences)
 
         Available Exercises: \(exerciseList)
 
         Recommend 3 exercises for this muscle group, ordered by priority. Consider the user's goal and experience level.
+        Strictly prioritize FAVORITES and avoid AVOID unless there are no safe alternatives.
 
         Return JSON format:
         {
@@ -332,7 +462,9 @@ class OpenAIService {
         researchExercises: [ExerciseDetail],
         equipmentFiltered: [ExerciseDetail],
         orderingPrinciples: ExerciseOrderingResearch?,
-        recentSets: [ExerciseSet]
+        recentSets: [ExerciseSet],
+        favorites: [String],
+        avoids: [String]
     ) -> String {
         // Existing research exercise formatting...
         let researchContext = researchExercises.prefix(5).map { ex in
@@ -352,6 +484,7 @@ class OpenAIService {
         }.joined(separator: "\n")
 
         let orderingGuidance = orderingPrinciples?.optimalSequence.components(separatedBy: ".").prefix(2).joined(separator: ". ") ?? "Prioritize compound exercises first, then isolation."
+        let preferences = preferencesText(favorites: favorites, avoids: avoids)
 
         // NEW: Add volume landmarks guidance
         let volumeGuidance: String
@@ -420,7 +553,7 @@ class OpenAIService {
         Your recommendation should:
         1. Match the recommended exercise count from volume targets
         2. Distribute sets across exercises to reach the target sets per session
-        3. Prioritize compound exercises first (per ordering principles)
+        3. Prioritize FAVORITES first; avoid AVOID unless no feasible alternatives; then respect exercise ordering principles
         4. Match user's equipment and experience level
         5. Reference research data (EMG, effectiveness) in your reasoning
 
@@ -449,6 +582,13 @@ class OpenAIService {
             "target_sets_range": "8-10"
         }
         """
+    }
+
+    private func preferencesText(favorites: [String], avoids: [String]) -> String {
+        var lines: [String] = []
+        if !favorites.isEmpty { lines.append("FAVORITES: \(favorites.joined(separator: ", "))") }
+        if !avoids.isEmpty { lines.append("AVOID: \(avoids.joined(separator: ", "))") }
+        return lines.isEmpty ? "" : ("\nUSER PREFERENCES:\n" + lines.joined(separator: "\n"))
     }
 
     // Simple chat bridge for the floating chatbot
@@ -488,7 +628,7 @@ class OpenAIService {
 
         Return JSON format:
         {
-            "priority_order": ["muscle_group_1", "muscle_group_2", "muscle_group_3"]
+            "priorityOrder": ["muscle_group_1", "muscle_group_2", "muscle_group_3"]
         }
         """
     }
@@ -509,8 +649,17 @@ class OpenAIService {
     }
     private func parseMuscleGroupPriority(from json: String) throws -> [String] {
         guard let data = json.data(using: .utf8) else { throw OpenAIError.parseError }
-        let response = try JSONDecoder().decode(MuscleGroupPriorityResponse.self, from: data)
-        return response.priorityOrder
+        // Try robust parsing: object (camelCase or snake_case) or raw array fallback
+        let decoder = JSONDecoder()
+        if let obj = try? decoder.decode(MuscleGroupPriorityResponse.self, from: data) {
+            return obj.priorityOrder
+        }
+        if let arr = try? decoder.decode([String].self, from: data) {
+            return arr
+        }
+        // As a last resort, don't throw noisy errors — return empty to allow caller fallback
+        print("❌ [parseMuscleGroupPriority] error: missing priorityOrder in response")
+        return []
     }
 }
 
@@ -609,7 +758,20 @@ struct ExerciseRecommendationResponse: Decodable {
     }
 }
 struct SetRepRecommendation: Decodable { let sets: Int; let reps: Int; let weight: Double; let restSeconds: Int; let notes: String }
-struct MuscleGroupPriorityResponse: Decodable { let priorityOrder: [String] }
+struct MuscleGroupPriorityResponse: Decodable {
+    let priorityOrder: [String]
+    enum CodingKeys: String, CodingKey { case priorityOrder, priority_order }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let camel = try c.decodeIfPresent([String].self, forKey: .priorityOrder) {
+            self.priorityOrder = camel
+        } else if let snake = try c.decodeIfPresent([String].self, forKey: .priority_order) {
+            self.priorityOrder = snake
+        } else {
+            self.priorityOrder = []
+        }
+    }
+}
 
 // MARK: - Errors
 enum OpenAIError: Error, LocalizedError {

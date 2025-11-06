@@ -1,0 +1,19 @@
+{
+  "note": "Truncated for app bundle; full narrative available in source documentation.",
+  "groups": {
+    "Quads": { "recommended_rest_days": 2 },
+    "Hamstrings": { "recommended_rest_days": 2 },
+    "Glutes": { "recommended_rest_days": 2 },
+    "Calves": { "recommended_rest_days": 1 },
+    "Chest": { "recommended_rest_days": 2 },
+    "Back": { "recommended_rest_days": 2 },
+    "Shoulders": { "recommended_rest_days": 2 }
+  },
+  "recovery_windows": {
+    "MPS_timeline": "After resistance training, MPS remains elevated ~24–48h; trained ~36h, untrained up to ~48h.",
+    "muscle_damage_soreness_patterns": "DOMS typically peaks 24–72h after novel/high-volume work; repeated bout effect reduces over time.",
+    "performance_recovery_curves": "Strength generally recovers within ~48–72h after a hard session; extremely taxing work may need longer.",
+    "rest_by_intensity": "Heavier/eccentric work needs ~48–72h; lighter work may recover in 24–48h."
+  }
+}
+

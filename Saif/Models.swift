@@ -133,6 +133,156 @@ struct ExerciseSet: Codable, Identifiable {
     }
 }
 
+// MARK: - Analytics Models
+struct AnalyticsData {
+    let overview: OverviewStats
+    let strengthProgress: [ExerciseProgress]
+    let volumeByMuscle: [MuscleVolumeData]
+    let workoutDates: [Date]
+    let personalRecords: [PersonalRecord]
+    let splitBalance: [SplitBalanceData]
+}
+
+// MARK: - Session Planning
+// Complete session plan with all exercises and targets
+struct SessionPlan: Codable, Identifiable {
+    let id: UUID
+    let sessionId: UUID
+    let userId: UUID
+    let workoutType: String
+    let muscleGroups: [String]
+    let generatedAt: Date
+    let exercises: [PlannedExercise]
+    let volumeTargets: [MuscleVolumeTarget]
+    let safetyNotes: [String]
+    let estimatedDuration: Int // minutes
+
+    struct PlannedExercise: Codable, Identifiable {
+        let id: UUID
+        let exerciseName: String
+        let exerciseId: UUID?
+        let muscleGroup: String
+        let orderIndex: Int
+        let isCompound: Bool
+        let targetSets: Int
+        let targetRepsMin: Int
+        let targetRepsMax: Int
+        let restSeconds: Int
+        let intensityTechnique: IntensityTechnique?
+        let rationale: String // Why this exercise was chosen
+        let safetyModification: String? // Any injury-related modifications
+        let isCompleted: Bool
+        let actualSets: Int
+    }
+
+    struct MuscleVolumeTarget: Codable, Identifiable {
+        let id = UUID()
+        let muscleGroup: String
+        let targetSetsToday: Int
+        let weeklyTarget: Int
+        let completedThisWeek: Int
+        let reasoning: String
+    }
+}
+
+// Intensity techniques
+enum IntensityTechnique: String, Codable {
+    case dropSets = "Drop Sets"
+    case restPause = "Rest-Pause"
+    case supersets = "Supersets"
+    case none = "None"
+
+    var description: String {
+        switch self {
+        case .dropSets:
+            return "After reaching failure, reduce weight 20-30% and continue for 4-6 more reps. Repeat 2-3 times."
+        case .restPause:
+            return "After reaching failure, rest 15-20 seconds, then continue for 3-5 more reps. Repeat 2 times."
+        case .supersets:
+            return "Perform two exercises back-to-back with minimal rest between them."
+        case .none:
+            return "Standard straight sets with normal rest periods."
+        }
+    }
+}
+
+// Session adaptation tracking
+struct SessionAdaptation: Codable {
+    let timestamp: Date
+    let exerciseId: UUID
+    let reason: AdaptationReason
+    let action: AdaptationAction
+    let notes: String
+
+    enum AdaptationReason: String, Codable {
+        case failedSet = "Failed Set"
+        case painReported = "Pain Reported"
+        case equipmentUnavailable = "Equipment Unavailable"
+        case userRequest = "User Request"
+        case fatigue = "Excessive Fatigue"
+    }
+
+    enum AdaptationAction: String, Codable {
+        case reducedWeight = "Reduced Weight"
+        case reducedSets = "Reduced Sets"
+        case substitutedExercise = "Substituted Exercise"
+        case addedRest = "Extended Rest"
+        case removedTechnique = "Removed Intensity Technique"
+    }
+}
+
+struct OverviewStats {
+    let totalWorkouts: Int
+    let totalSets: Int
+    let currentStreak: Int
+    let personalRecordsThisMonth: Int
+    let averageStrengthIncrease: Double
+}
+
+struct ExerciseProgress {
+    let exerciseName: String
+    let dataPoints: [ProgressDataPoint]
+    struct ProgressDataPoint {
+        let date: Date
+        let weight: Double
+        let estimatedOneRM: Double
+    }
+}
+
+struct MuscleVolumeData: Identifiable {
+    let id = UUID()
+    let muscleGroup: String
+    let sets: Int
+    let targetMin: Int
+    let targetMax: Int
+    var percentage: Double {
+        let midpoint = Double(targetMin + targetMax) / 2.0
+        return midpoint > 0 ? min(Double(sets) / midpoint, 1.0) : 0
+    }
+}
+
+struct PersonalRecord: Identifiable {
+    let id = UUID()
+    let exerciseName: String
+    let weight: Double
+    let reps: Int
+    let date: Date
+    let isNewRecord: Bool
+}
+
+struct SplitBalanceData: Identifiable {
+    let id = UUID()
+    let category: String // e.g., "Push (Chest/Shoulders/Triceps)"
+    let muscleGroups: [String]
+    let workoutCount: Int
+    let recommendedCount: Int
+    var percentage: Double {
+        let denom = max(Double(recommendedCount), 1.0)
+        return min(Double(workoutCount) / denom, 1.0)
+    }
+    var isLow: Bool { workoutCount < recommendedCount }
+}
+
 // Stretch -> stretches table
 struct Stretch: Codable, Identifiable {
     let id: UUID
@@ -150,74 +300,4 @@ struct Stretch: Codable, Identifiable {
     }
 }
 
-// MARK: - Session Plan Models (Supabase: session_plans)
-
-struct PlanExercise: Codable {
-    var exerciseId: UUID?
-    var exerciseName: String
-    var priority: Int
-    var sets: Int
-    var isCompound: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case exerciseId = "exercise_id"
-        case exerciseName = "exercise_name"
-        case priority
-        case sets
-        case isCompound = "is_compound"
-    }
-}
-
-struct VolumeContext: Codable {
-    var mav: String?
-    var setsPerSessionRange: String?
-    var exercisesPerSession: String?
-    var frequency: String?
-    var repRange: String?
-    var restBetweenSets: String?
-    var intensity: String?
-    var source: String?
-    var notes: String?
-
-    enum CodingKeys: String, CodingKey {
-        case mav
-        case setsPerSessionRange = "setsPerSessionRange"
-        case exercisesPerSession = "exercisesPerSession"
-        case frequency
-        case repRange = "repRange"
-        case restBetweenSets = "restBetweenSets"
-        case intensity
-        case source
-        case notes
-    }
-}
-
-struct SessionPlan: Codable, Identifiable {
-    let id: UUID
-    let sessionId: UUID
-    let userId: UUID
-    let workoutType: String
-    let targetSetsMin: Int
-    let targetSetsMax: Int
-    let totalSetsPlanned: Int
-    let volumeContext: VolumeContext
-    let exercises: [PlanExercise]
-    let notes: String?
-    let createdAt: Date
-    let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case sessionId = "session_id"
-        case userId = "user_id"
-        case workoutType = "workout_type"
-        case targetSetsMin = "target_sets_min"
-        case targetSetsMax = "target_sets_max"
-        case totalSetsPlanned = "total_sets_planned"
-        case volumeContext = "volume_context"
-        case exercises
-        case notes
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-    }
-}
+// (Removed legacy SessionPlan/PlanExercise/VolumeContext definitions)

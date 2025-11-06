@@ -87,7 +87,7 @@ struct MuscleGroupSelectionView: View {
             }
         }
         .background(
-            NavigationLink(isActive: $goSummary) { WorkoutSummaryView() } label: { EmptyView() }
+            NavigationLink(isActive: $goSummary) { PostWorkoutSummaryView() } label: { EmptyView() }
         )
     }
 

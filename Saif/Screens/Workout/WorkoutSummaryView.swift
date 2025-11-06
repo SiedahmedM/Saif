@@ -6,6 +6,7 @@ struct WorkoutSummaryView: View {
     @State private var notes = ""
     @State private var saving = false
     @State private var goHome = false
+    @State private var goPostSummary = false
 
     var body: some View {
         ZStack { SAIFColors.background.ignoresSafeArea()
@@ -42,7 +43,10 @@ struct WorkoutSummaryView: View {
         }
         .navigationTitle("SAIF").navigationBarTitleDisplayMode(.inline)
         .background(
-            NavigationLink(isActive: $goHome) { HomeRootView() } label: { EmptyView() }
+            Group {
+                NavigationLink(isActive: $goHome) { HomeRootView() } label: { EmptyView() }
+                NavigationLink(isActive: $goPostSummary) { PostWorkoutSummaryView(initialNotes: notes).environmentObject(workoutManager) } label: { EmptyView() }
+            }
         )
     }
 
@@ -55,12 +59,9 @@ struct WorkoutSummaryView: View {
     }
 
     private func save() {
-        saving = true
-        Task {
-            await workoutManager.completeWorkout(notes: notes.isEmpty ? nil : notes)
-            saving = false
-            goHome = true
-        }
+        // Navigate to the richer summary; do NOT complete the workout yet,
+        // so summary can use current session + plan state. Completion happens on Done.
+        goPostSummary = true
     }
 }
 

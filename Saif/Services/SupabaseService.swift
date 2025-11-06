@@ -139,6 +139,115 @@ class SupabaseService {
         return sessions.first(where: { $0.completedAt != nil })
     }
 
+    // MARK: - Session Plans
+    struct SessionPlanDB: Encodable {
+        let id: String
+        let session_id: String
+        let user_id: String
+        let workout_type: String
+        let muscle_groups: [String]
+        let generated_at: Date
+        let exercises: [SessionPlan.PlannedExercise]
+        let volume_targets: [SessionPlan.MuscleVolumeTarget]
+        let safety_notes: [String]
+        let estimated_duration: Int
+    }
+
+    func createSessionPlan(_ plan: SessionPlan) async throws {
+        let payload = SessionPlanDB(
+            id: plan.id.uuidString,
+            session_id: plan.sessionId.uuidString,
+            user_id: plan.userId.uuidString,
+            workout_type: plan.workoutType,
+            muscle_groups: plan.muscleGroups,
+            generated_at: plan.generatedAt,
+            exercises: plan.exercises,
+            volume_targets: plan.volumeTargets,
+            safety_notes: plan.safetyNotes,
+            estimated_duration: plan.estimatedDuration
+        )
+        try await client.database
+            .from("session_plans")
+            .insert(payload)
+            .execute()
+    }
+
+    func getSessionPlan(sessionId: UUID) async throws -> SessionPlan? {
+        let plans: [SessionPlan] = try await client.database
+            .from("session_plans")
+            .select()
+            .eq("session_id", value: sessionId.uuidString)
+            .limit(1)
+            .execute()
+            .value
+        return plans.first
+    }
+
+    func updateSessionPlan(_ plan: SessionPlan) async throws {
+        let payload = SessionPlanDB(
+            id: plan.id.uuidString,
+            session_id: plan.sessionId.uuidString,
+            user_id: plan.userId.uuidString,
+            workout_type: plan.workoutType,
+            muscle_groups: plan.muscleGroups,
+            generated_at: plan.generatedAt,
+            exercises: plan.exercises,
+            volume_targets: plan.volumeTargets,
+            safety_notes: plan.safetyNotes,
+            estimated_duration: plan.estimatedDuration
+        )
+        try await client.database
+            .from("session_plans")
+            .update(payload)
+            .eq("id", value: plan.id.uuidString)
+            .execute()
+    }
+
+    struct SessionAdaptationDB: Encodable {
+        let session_id: String
+        let exercise_id: String
+        let timestamp: Date
+        let reason: String
+        let action: String
+        let notes: String
+    }
+
+    func recordSessionAdaptation(_ adaptation: SessionAdaptation, sessionId: UUID) async throws {
+        let payload = SessionAdaptationDB(
+            session_id: sessionId.uuidString,
+            exercise_id: adaptation.exerciseId.uuidString,
+            timestamp: adaptation.timestamp,
+            reason: adaptation.reason.rawValue,
+            action: adaptation.action.rawValue,
+            notes: adaptation.notes
+        )
+        try await client.database
+            .from("session_adaptations")
+            .insert(payload)
+            .execute()
+    }
+
+    // Additional helpers (requested): ranged fetch + friendly profile updater
+    func getWorkoutSessions(userId: UUID, from startDate: Date, to endDate: Date) async throws -> [WorkoutSession] {
+        let start = startDate.ISO8601Format()
+        let end = endDate.ISO8601Format()
+        let response: [WorkoutSession] = try await client.database
+            .from("workout_sessions")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .gte("started_at", value: start)
+            .lte("started_at", value: end)
+            .order("started_at", ascending: false)
+            .execute()
+            .value
+        return response
+    }
+
+    // Wrapper to align with older callers; delegates to type-safe updateProfile
+    func updateUserProfile(_ profile: UserProfile) async throws {
+        try await updateProfile(profile)
+    }
+
     // MARK: - Exercise Sets
 
     struct NewExerciseSet: Encodable {
@@ -183,6 +292,43 @@ class SupabaseService {
         return response
     }
 
+    // Bulk fetch sets for many sessions to reduce roundtrips
+    func getExerciseSetsForSessions(sessionIds: [UUID]) async throws -> [ExerciseSet] {
+        guard !sessionIds.isEmpty else { return [] }
+        let ids = sessionIds.map { $0.uuidString }
+        let response: [ExerciseSet] = try await client.database
+            .from("exercise_sets")
+            .select()
+            .in("session_id", values: ids)
+            .order("completed_at", ascending: true)
+            .execute()
+            .value
+        return response
+    }
+
+    struct UpdateExerciseSetPayload: Encodable {
+        let reps: Int
+        let weight: Double
+        let rpe: Int?
+    }
+
+    func updateExerciseSet(setId: UUID, reps: Int, weight: Double, rpe: Int?) async throws {
+        let payload = UpdateExerciseSetPayload(reps: reps, weight: weight, rpe: rpe)
+        try await client.database
+            .from("exercise_sets")
+            .update(payload)
+            .eq("id", value: setId.uuidString)
+            .execute()
+    }
+
+    func deleteExerciseSet(setId: UUID) async throws {
+        try await client.database
+            .from("exercise_sets")
+            .delete()
+            .eq("id", value: setId.uuidString)
+            .execute()
+    }
+
     func getExercisesByIds(_ ids: [UUID]) async throws -> [Exercise] {
         guard !ids.isEmpty else { return [] }
         let idStrings = ids.map { $0.uuidString }
@@ -193,6 +339,65 @@ class SupabaseService {
             .execute()
             .value
         return response
+    }
+
+    func getExerciseById(_ id: UUID) async throws -> Exercise {
+        let response: [Exercise] = try await client.database
+            .from("exercises")
+            .select()
+            .eq("id", value: id.uuidString)
+            .limit(1)
+            .execute()
+            .value
+        if let ex = response.first { return ex }
+        throw SupabaseError.invalidData
+    }
+
+    // MARK: - Exercise Preferences
+    func getExercisePreferences(userId: UUID) async throws -> [ExercisePreference] {
+        let response: [ExercisePreference] = try await client.database
+            .from("exercise_preferences")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+        return response
+    }
+
+    struct PrefUpsert: Encodable {
+        let user_id: String
+        let exercise_id: String
+        let preference_level: String
+        let reason: String?
+        let updated_at: Date
+    }
+
+    func setExercisePreference(
+        userId: UUID,
+        exerciseId: UUID,
+        level: ExercisePreference.PreferenceLevel,
+        reason: String?
+    ) async throws {
+        let payload = PrefUpsert(
+            user_id: userId.uuidString,
+            exercise_id: exerciseId.uuidString,
+            preference_level: level.rawValue,
+            reason: reason,
+            updated_at: Date()
+        )
+        try await client.database
+            .from("exercise_preferences")
+            .upsert(payload, onConflict: "user_id,exercise_id")
+            .execute()
+    }
+
+    func removeExercisePreference(userId: UUID, exerciseId: UUID) async throws {
+        try await client.database
+            .from("exercise_preferences")
+            .delete()
+            .eq("user_id", value: userId.uuidString)
+            .eq("exercise_id", value: exerciseId.uuidString)
+            .execute()
     }
 
     func getExerciseHistory(userId: UUID, exerciseId: UUID, limit: Int = 20) async throws -> [ExerciseSet] {
@@ -232,9 +437,91 @@ class SupabaseService {
         return response
     }
 
+    // Fetch a single exercise by approximate name and muscle group
+    func getExerciseByName(name: String, muscleGroup: String) async throws -> Exercise? {
+        // Name variants: strip parentheses and common shorthands
+        let nameVariants = nameSearchVariants(name)
+        // Try to match by name and group (case-insensitive)
+        let groupVariants = muscleGroupSearchVariants(muscleGroup)
+        for n in nameVariants {
+            for g in groupVariants {
+                let items: [Exercise] = try await client.database
+                    .from("exercises")
+                    .select()
+                    .ilike("name", value: "%\(n)%")
+                    .ilike("muscle_group", value: "%\(g)%")
+                    .limit(1)
+                    .execute()
+                    .value
+                if let first = items.first { return first }
+            }
+        }
+        // Fallback: try name only across variants
+        for n in nameVariants {
+            let items: [Exercise] = try await client.database
+                .from("exercises")
+                .select()
+                .ilike("name", value: "%\(n)%")
+                .limit(1)
+                .execute()
+                .value
+            if let first = items.first { return first }
+        }
+        return nil
+    }
+
+    private func nameSearchVariants(_ raw: String) -> [String] {
+        var s: Set<String> = []
+        func stripParens(_ t: String) -> String {
+            var text = t
+            if let r1 = text.range(of: #"\(.*\)"#, options: .regularExpression) { text.removeSubrange(r1) }
+            return text
+        }
+        func simplify(_ t: String) -> String {
+            var x = t
+            if let r = x.range(of: " - ") { x = String(x[..<r.lowerBound]) }
+            if let r = x.range(of: ":") { x = String(x[..<r.lowerBound]) }
+            return x
+        }
+        let base = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        s.insert(base)
+        s.insert(stripParens(base).trimmingCharacters(in: .whitespacesAndNewlines))
+        s.insert(simplify(base).trimmingCharacters(in: .whitespacesAndNewlines))
+        let noParens = stripParens(base)
+        s.insert(simplify(noParens).trimmingCharacters(in: .whitespacesAndNewlines))
+
+        // Common shorthand expansions
+        let map: [String:String] = [
+            "rdl": "romanian deadlift",
+            "ohp": "overhead press",
+            "dl": "deadlift",
+            "bp": "bench press"
+        ]
+        let lowered = base.lowercased()
+        for (k, v) in map { if lowered.contains(k) { s.insert(v) } }
+        return Array(s).filter { !$0.isEmpty }
+    }
+
     func getExercisesByMuscleGroup(workoutType: String, muscleGroup: String) async throws -> [Exercise] {
+        // For non-standard flows (custom, freeform, upper/lower/full body), ignore workout_type filter
+        let wtLower = workoutType.lowercased()
+        let isWildcardType = wtLower == "custom" || wtLower == "freeform" || wtLower.contains("upper") || wtLower.contains("lower") || wtLower.contains("full")
         // Try multiple case/spacing variants to be resilient to stored data
         let variants = muscleGroupSearchVariants(muscleGroup)
+        if isWildcardType {
+            var aggregated: [UUID: Exercise] = [:]
+            for v in variants {
+                let items: [Exercise] = try await client.database
+                    .from("exercises")
+                    .select()
+                    .ilike("muscle_group", value: "%\(v)%")
+                    .execute()
+                    .value
+                for ex in items { aggregated[ex.id] = ex }
+            }
+            return Array(aggregated.values)
+        }
+
         let wVariants = workoutTypeSearchVariants(workoutType)
         var aggregated: [UUID: Exercise] = [:]
         for wt in wVariants {
@@ -329,84 +616,6 @@ class SupabaseService {
         return recent.filter { $0.startedAt >= start && $0.startedAt < end }
     }
 
-    // MARK: - Session Plans
-
-    struct SessionPlanCreate: Encodable {
-        let session_id: String
-        let user_id: String
-        let workout_type: String
-        let target_sets_min: Int
-        let target_sets_max: Int
-        let total_sets_planned: Int
-        let volume_context: VolumeContext
-        let exercises: [PlanExercise]
-        let notes: String?
-    }
-
-    struct SessionPlanUpdate: Encodable {
-        let target_sets_min: Int?
-        let target_sets_max: Int?
-        let total_sets_planned: Int?
-        let volume_context: VolumeContext?
-        let exercises: [PlanExercise]?
-        let notes: String?
-        let updated_at: Date = Date()
-    }
-
-    func upsertSessionPlan(
-        sessionId: UUID,
-        userId: UUID,
-        workoutType: String,
-        targetMin: Int,
-        targetMax: Int,
-        totalSets: Int,
-        volume: VolumeContext,
-        items: [PlanExercise],
-        notes: String?
-    ) async throws -> SessionPlan {
-        let payload = SessionPlanCreate(
-            session_id: sessionId.uuidString,
-            user_id: userId.uuidString,
-            workout_type: workoutType,
-            target_sets_min: targetMin,
-            target_sets_max: targetMax,
-            total_sets_planned: totalSets,
-            volume_context: volume,
-            exercises: items,
-            notes: notes
-        )
-        let response: SessionPlan = try await client.database
-            .from("session_plans")
-            .upsert(payload, onConflict: "session_id")
-            .select()
-            .single()
-            .execute()
-            .value
-        return response
-    }
-
-    func getSessionPlan(sessionId: UUID) async throws -> SessionPlan? {
-        let rows: [SessionPlan] = try await client.database
-            .from("session_plans")
-            .select()
-            .eq("session_id", value: sessionId.uuidString)
-            .limit(1)
-            .execute()
-            .value
-        return rows.first
-    }
-
-    func updateSessionPlan(sessionId: UUID, update: SessionPlanUpdate) async throws -> SessionPlan {
-        let response: SessionPlan = try await client.database
-            .from("session_plans")
-            .update(update)
-            .eq("session_id", value: sessionId.uuidString)
-            .select()
-            .single()
-            .execute()
-            .value
-        return response
-    }
 }
 
 // MARK: - Custom Errors

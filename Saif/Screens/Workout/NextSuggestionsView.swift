@@ -46,7 +46,7 @@ struct NextSuggestionsView: View {
                     if let g = selectedGroup { ExerciseSelectionView(muscleGroup: g) } else { EmptyView() }
                 } label: { EmptyView() }
 
-                NavigationLink(isActive: $goSummary) { WorkoutSummaryView() } label: { EmptyView() }
+                NavigationLink(isActive: $goSummary) { PostWorkoutSummaryView() } label: { EmptyView() }
             }
             .padding(SAIFSpacing.xl)
         }

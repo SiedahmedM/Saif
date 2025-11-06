@@ -1,0 +1,126 @@
+import SwiftUI
+
+struct PostWorkoutSummaryView: View {
+    @EnvironmentObject var workoutManager: WorkoutManager
+    @Environment(\.dismiss) private var dismiss
+    var initialNotes: String? = nil
+    @State private var summaryData: WorkoutManager.WorkoutSummaryData?
+    @State private var goHome = false
+
+    var body: some View {
+        ZStack { SAIFColors.background.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: SAIFSpacing.xl) {
+                    header
+
+                    if let data = summaryData {
+                        CardView(title: "PERFORMANCE") {
+                            VStack(spacing: SAIFSpacing.lg) {
+                                ComparisonRow(label: "Exercises", planned: data.plannedExercises, actual: data.actualExercises)
+                                ComparisonRow(label: "Total Sets", planned: data.plannedSets, actual: data.actualSets)
+                                ComparisonRow(label: "Duration", planned: data.plannedDuration, actual: data.actualDuration, unit: "min")
+                                if data.overachievement > 0.05 {
+                                    HStack {
+                                        Image(systemName: "arrow.up.circle.fill").foregroundStyle(.green)
+                                        Text("+\(Int(data.overachievement * 100))% volume")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(.green)
+                                        Spacer()
+                                    }
+                                }
+                            }
+                        }
+
+                        if !data.topExercises.isEmpty {
+                            CardView(title: "TOP PERFORMANCES") {
+                                VStack(spacing: SAIFSpacing.md) {
+                                    ForEach(data.topExercises) { highlight in
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(highlight.exerciseName).font(.system(size: 16, weight: .semibold))
+                                                Text(highlight.achievement).font(.system(size: 14)).foregroundStyle(SAIFColors.accent)
+                                            }
+                                            Spacer()
+                                            Text(highlight.metric).font(.system(size: 16, weight: .bold)).foregroundStyle(SAIFColors.primary)
+                                        }
+                                        .padding()
+                                        .background(SAIFColors.surface)
+                                        .clipShape(RoundedRectangle(cornerRadius: SAIFRadius.md))
+                                    }
+                                }
+                            }
+                        }
+
+                        if !data.insights.isEmpty {
+                            CardView(title: "INSIGHTS") {
+                                VStack(alignment: .leading, spacing: SAIFSpacing.sm) {
+                                    ForEach(data.insights, id: \.self) { insight in
+                                        HStack(alignment: .top, spacing: SAIFSpacing.sm) {
+                                            Text("•")
+                                            Text(insight).font(.system(size: 15))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        CardView {
+                            VStack(alignment: .leading, spacing: SAIFSpacing.sm) {
+                                Label("Next Workout", systemImage: "calendar").font(.system(size: 14, weight: .semibold)).foregroundStyle(SAIFColors.mutedText)
+                                Text(data.nextWorkoutSuggestion).font(.system(size: 16))
+                            }
+                        }
+                    }
+
+                    // Actions
+                    VStack(spacing: SAIFSpacing.md) {
+                        PrimaryButton("Done") {
+                            Task {
+                                await workoutManager.completeWorkout(notes: initialNotes)
+                                goHome = true
+                            }
+                        }
+                        Button("View Detailed History") { goHome = true }.foregroundStyle(SAIFColors.mutedText)
+                    }
+                }
+                .padding(SAIFSpacing.xl)
+            }
+        }
+        .navigationTitle("Workout Complete").navigationBarTitleDisplayMode(.inline)
+        .background(
+            NavigationLink(isActive: $goHome) { HomeRootView() } label: { EmptyView() }
+        )
+        .task { summaryData = await workoutManager.generateWorkoutSummary() }
+    }
+
+    private var header: some View {
+        VStack(spacing: SAIFSpacing.sm) {
+            if let data = summaryData, data.prCount > 0 { Text("💪").font(.system(size: 60)) }
+            else { Text("✅").font(.system(size: 60)) }
+            Text("Workout Complete!").font(.system(size: 28, weight: .bold))
+            if let data = summaryData {
+                Text("\(data.actualExercises) exercises • \(data.actualSets) sets • \(data.actualDuration) min").foregroundStyle(SAIFColors.mutedText)
+            }
+        }
+    }
+}
+
+private struct ComparisonRow: View {
+    let label: String
+    let planned: Int
+    let actual: Int
+    var unit: String = ""
+    var body: some View {
+        HStack {
+            Text(label).font(.system(size: 14)).foregroundStyle(SAIFColors.mutedText)
+            Spacer()
+            Text("\(planned)\(unit)").font(.system(size: 14)).foregroundStyle(SAIFColors.mutedText)
+            Image(systemName: "arrow.right").font(.system(size: 12)).foregroundStyle(SAIFColors.mutedText)
+            Text("\(actual)\(unit)").font(.system(size: 16, weight: .bold)).foregroundStyle(actual >= planned ? .green : SAIFColors.text)
+        }
+    }
+}
+
+#Preview {
+    NavigationStack { PostWorkoutSummaryView().environmentObject(WorkoutManager()) }
+}

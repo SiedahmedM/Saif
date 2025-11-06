@@ -14,6 +14,9 @@ struct ContentView: View {
     var body: some View {
         NavigationStack { WelcomeView() }
             .onAppear { if let p = authManager.userProfile { workoutManager.initialize(with: p) } }
+            .onChange(of: authManager.userProfile?.updatedAt) { _, _ in
+                if let p = authManager.userProfile { workoutManager.initialize(with: p) }
+            }
     }
 }
 
