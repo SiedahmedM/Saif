@@ -6,15 +6,19 @@ struct HomeRootView: View {
     @EnvironmentObject var workoutManager: WorkoutManager
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @State private var showResumePrompt = false
+    @State private var selectedTab: Int = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack { HomeDashboardView() }
                 .tabItem { Label("Home", systemImage: "house") }
+                .tag(0)
             NavigationStack { ProgressAnalyticsView() }
                 .tabItem { Label("Analytics", systemImage: "chart.bar.doc.horizontal") }
+                .tag(1)
             NavigationStack { CalendarHistoryView() }
                 .tabItem { Label("Calendar", systemImage: "calendar") }
+                .tag(2)
         }
         .onAppear {
             if let profile = authManager.userProfile { workoutManager.initialize(with: profile) }
@@ -33,6 +37,10 @@ struct HomeRootView: View {
         // Offline banner
         .safeAreaInset(edge: .top) {
             if !networkMonitor.isConnected { OfflineBanner(text: "No connection. Offline mode enabled.") }
+        }
+        // Always land on Home after workout completion
+        .onReceive(NotificationCenter.default.publisher(for: .saifWorkoutCompleted)) { _ in
+            selectedTab = 0
         }
         .alert("Resume your last workout?", isPresented: $showResumePrompt) {
             Button("Resume") {

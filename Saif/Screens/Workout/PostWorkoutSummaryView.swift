@@ -117,12 +117,19 @@ struct PostWorkoutSummaryView: View {
     }
 
     private var header: some View {
-        VStack(spacing: SAIFSpacing.sm) {
-            if let data = summaryData, data.prCount > 0 { Text("💪").font(.system(size: 60)) }
-            else { Text("✅").font(.system(size: 60)) }
-            Text("Workout Complete!").font(.system(size: 28, weight: .bold))
-            if let data = summaryData {
-                Text("\(data.actualExercises) exercises • \(data.actualSets) sets • \(data.actualDuration) min").foregroundStyle(SAIFColors.mutedText)
+        ZStack(alignment: .top) {
+            VStack(spacing: SAIFSpacing.sm) {
+                Text("✅").font(.system(size: 48))
+                Text("All done! Great work today.")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(SAIFColors.text)
+                Text("Here’s how you did:")
+                    .font(.system(size: 14))
+                    .foregroundStyle(SAIFColors.mutedText)
+                if let data = summaryData {
+                    Text("\(data.actualExercises) exercises • \(data.actualSets) sets • \(data.actualDuration) min")
+                        .foregroundStyle(SAIFColors.mutedText)
+                }
             }
         }
     }
